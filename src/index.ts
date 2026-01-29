@@ -218,7 +218,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
+  // Log tool call for debugging
+  console.error(`[MCP] Tool call: ${name}`);
+  console.error(`[MCP] Arguments: ${JSON.stringify(args, null, 2)}`);
+
   const result = await handleTool(name, (args || {}) as Record<string, unknown>, toolContext);
+
+  // Log result status
+  if (result.isError) {
+    console.error(`[MCP] Tool error: ${result.content[0]?.text}`);
+  } else {
+    console.error(`[MCP] Tool success: ${name}`);
+  }
+
   return {
     content: result.content,
     isError: result.isError,
