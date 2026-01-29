@@ -556,8 +556,12 @@ export class MediagraphClient {
     return this.request<AutoTag>('GET', `/api/auto_tags/${id}`);
   }
 
-  async bulkFindAutoTags(names: string[]): Promise<AutoTag[]> {
-    return this.request<AutoTag[]>('POST', '/api/auto_tags/bulk_find', { body: { names } });
+  async bulkFindAutoTags(tagNames: string[]): Promise<AutoTag[]> {
+    return this.request<AutoTag[]>('POST', '/api/auto_tags/bulk_find', { body: { tag_names: tagNames } });
+  }
+
+  async deleteAutoTag(id: number | string): Promise<void> {
+    await this.request<void>('DELETE', `/api/auto_tags/${id}`);
   }
 
   // ============================================================================
@@ -1276,7 +1280,7 @@ export class MediagraphClient {
     return this.request<FilterGroup>('GET', `/api/filter_groups/${id}`);
   }
 
-  async createFilterGroup(data: { name: string; filters: Record<string, unknown> }): Promise<FilterGroup> {
+  async createFilterGroup(data: { name: string; filter_order?: string[] }): Promise<FilterGroup> {
     return this.request<FilterGroup>('POST', '/api/filter_groups', { body: { filter_group: data } });
   }
 
@@ -1309,7 +1313,7 @@ export class MediagraphClient {
     return this.request<SearchQuery>('GET', `/api/search_queries/${id}`);
   }
 
-  async createSearchQuery(data: { name: string; query: string; filters?: Record<string, unknown> }): Promise<SearchQuery> {
+  async createSearchQuery(data: { name: string; description?: string; sql: string }): Promise<SearchQuery> {
     return this.request<SearchQuery>('POST', '/api/search_queries', { body: { search_query: data } });
   }
 

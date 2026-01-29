@@ -9,34 +9,45 @@ export const socialTools: ToolModule = {
     // Comments
     {
       name: 'list_comments',
-      description: 'List comments on a resource',
+      description: 'List comments on a Lightbox or Collection',
       inputSchema: {
         type: 'object',
         properties: {
-          commentable_type: { type: 'string', enum: ['Asset', 'Collection', 'Lightbox'] },
-          commentable_id: { type: 'number' },
+          type: { type: 'string', enum: ['Lightbox', 'Collection'], description: 'Type of commentable object' },
+          id: { type: 'number', description: 'ID of the commentable object' },
           ...paginationParams,
         },
-        required: ['commentable_type', 'commentable_id'],
+        required: ['type', 'id'],
       },
     },
     {
       name: 'create_comment',
-      description: 'Create a comment',
+      description: 'Create a new comment on a Lightbox or Collection. Supports markdown and @mentions.',
       inputSchema: {
         type: 'object',
         properties: {
-          body: { type: 'string' },
-          commentable_type: { type: 'string', enum: ['Asset', 'Collection', 'Lightbox'] },
-          commentable_id: { type: 'number' },
-          parent_id: { type: 'number' },
+          type: { type: 'string', enum: ['Lightbox', 'Collection'], description: 'Type of commentable object' },
+          id: { type: 'number', description: 'ID of the commentable object' },
+          text: { type: 'string', description: 'Comment text (supports markdown and @mentions)' },
         },
-        required: ['body', 'commentable_type', 'commentable_id'],
+        required: ['type', 'id', 'text'],
+      },
+    },
+    {
+      name: 'update_comment',
+      description: 'Update a comment. Only the comment author can update their own comments.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          text: { type: 'string', description: 'Updated comment text' },
+        },
+        required: ['id', 'text'],
       },
     },
     {
       name: 'delete_comment',
-      description: 'Delete a comment',
+      description: 'Delete a comment. Only the comment author can delete their own comments.',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
 
@@ -56,10 +67,20 @@ export const socialTools: ToolModule = {
   handlers: {
     // Comments
     async list_comments(args, { client }) {
-      return successResult(await client.listComments(args));
+      return successResult(await client.listComments(args as { type: string; id: number }));
     },
     async create_comment(args, { client }) {
-      return successResult(await client.createComment(args as { body: string; commentable_type: string; commentable_id: number; parent_id?: number }));
+      return successResult(await client.createComment(
+        args.type as string,
+        args.id as number,
+        { text: args.text as string },
+      ));
+    },
+    async update_comment(args, { client }) {
+      return successResult(await client.updateComment(
+        args.id as number | string,
+        { text: args.text as string },
+      ));
     },
     async delete_comment(args, { client }) {
       await client.deleteComment(args.id as number | string);

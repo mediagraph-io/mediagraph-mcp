@@ -67,16 +67,53 @@ export const adminTools: ToolModule = {
       inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
     },
     {
+      name: 'get_filter_group',
+      description: 'Get filter group details',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
       name: 'create_filter_group',
-      description: 'Save a filter group',
+      description: 'Create a new filter group with saved filter configurations',
       inputSchema: {
         type: 'object',
         properties: {
           name: { type: 'string' },
-          filters: { type: 'object', description: 'Filter parameters to save' },
+          filter_order: { type: 'array', items: { type: 'string' }, description: 'Array of filter names in display order' },
         },
-        required: ['name', 'filters'],
+        required: ['name'],
       },
+    },
+    {
+      name: 'update_filter_group',
+      description: 'Update a filter group',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          name: { type: 'string' },
+          filter_order: { type: 'array', items: { type: 'string' }, description: 'Array of filter names in display order' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'update_filter_group_visibility',
+      description: 'Update the visibility of a specific filter within a filter group',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          name: { type: 'string', description: 'Filter name' },
+          type: { type: 'string', enum: ['explore', 'manage'], description: 'Visibility type' },
+          visible: { type: 'boolean', description: 'Visibility status' },
+        },
+        required: ['id', 'name', 'type', 'visible'],
+      },
+    },
+    {
+      name: 'delete_filter_group',
+      description: 'Delete a filter group',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
 
     // Search Queries
@@ -86,17 +123,40 @@ export const adminTools: ToolModule = {
       inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
     },
     {
+      name: 'get_search_query',
+      description: 'Get search query details',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
       name: 'create_search_query',
-      description: 'Save a search query',
+      description: 'Save a new search query. The sql field should contain an Elasticsearch SQL WHERE clause.',
       inputSchema: {
         type: 'object',
         properties: {
-          name: { type: 'string' },
-          query: { type: 'string' },
-          filters: { type: 'object' },
+          name: { type: 'string', description: 'Search name' },
+          description: { type: 'string', description: 'Search description' },
+          sql: { type: 'string', description: 'SQL WHERE clause (Elasticsearch SQL syntax)' },
         },
-        required: ['name', 'query'],
+        required: ['name', 'sql'],
       },
+    },
+    {
+      name: 'update_search_query',
+      description: 'Update a saved search query name or description. Note: The SQL query cannot be changed after creation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          name: { type: 'string' },
+          description: { type: 'string' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_search_query',
+      description: 'Delete a saved search query',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
 
     // Crop Presets
@@ -208,16 +268,44 @@ export const adminTools: ToolModule = {
     async list_filter_groups(args, { client }) {
       return successResult(await client.listFilterGroups(args));
     },
+    async get_filter_group(args, { client }) {
+      return successResult(await client.getFilterGroup(args.id as number | string));
+    },
     async create_filter_group(args, { client }) {
-      return successResult(await client.createFilterGroup(args as { name: string; filters: Record<string, unknown> }));
+      return successResult(await client.createFilterGroup(args as { name: string; filter_order?: string[] }));
+    },
+    async update_filter_group(args, { client }) {
+      const { id, ...data } = args;
+      return successResult(await client.updateFilterGroup(id as number | string, data));
+    },
+    async update_filter_group_visibility(args, { client }) {
+      return successResult(await client.updateFilterGroupVisibility(
+        args.id as number | string,
+        { name: args.name as string, type: args.type as 'explore' | 'manage', visible: args.visible as boolean },
+      ));
+    },
+    async delete_filter_group(args, { client }) {
+      await client.deleteFilterGroup(args.id as number | string);
+      return successResult({ success: true });
     },
 
     // Search Queries
     async list_search_queries(args, { client }) {
       return successResult(await client.listSearchQueries(args));
     },
+    async get_search_query(args, { client }) {
+      return successResult(await client.getSearchQuery(args.id as number | string));
+    },
     async create_search_query(args, { client }) {
-      return successResult(await client.createSearchQuery(args as { name: string; query: string; filters?: Record<string, unknown> }));
+      return successResult(await client.createSearchQuery(args as { name: string; description?: string; sql: string }));
+    },
+    async update_search_query(args, { client }) {
+      const { id, ...data } = args;
+      return successResult(await client.updateSearchQuery(id as number | string, data));
+    },
+    async delete_search_query(args, { client }) {
+      await client.deleteSearchQuery(args.id as number | string);
+      return successResult({ success: true });
     },
 
     // Crop Presets

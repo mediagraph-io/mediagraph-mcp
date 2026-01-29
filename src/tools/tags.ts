@@ -60,6 +60,11 @@ export const tagTools: ToolModule = {
       description: 'Get details of a specific tagging (tag-to-asset relationship)',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
+    {
+      name: 'delete_tagging',
+      description: 'Remove a tagging (untag an asset)',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
 
     // Auto Tags
     {
@@ -70,6 +75,25 @@ export const tagTools: ToolModule = {
         properties: { ...paginationParams, q: { type: 'string' } },
         required: [],
       },
+    },
+    {
+      name: 'get_auto_tag',
+      description: 'Get auto tag details',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'bulk_find_auto_tags',
+      description: 'Find multiple auto tags by their names at once',
+      inputSchema: {
+        type: 'object',
+        properties: { tag_names: { type: 'array', items: { type: 'string' }, description: 'Array of auto tag names to find' } },
+        required: ['tag_names'],
+      },
+    },
+    {
+      name: 'delete_auto_tag',
+      description: 'Delete/dismiss an auto tag',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
 
     // Taxonomies
@@ -160,10 +184,24 @@ export const tagTools: ToolModule = {
     async get_tagging(args, { client }) {
       return successResult(await client.getTagging(args.id as number | string));
     },
+    async delete_tagging(args, { client }) {
+      await client.deleteTagging(args.id as number | string);
+      return successResult({ success: true });
+    },
 
     // Auto Tags
     async list_auto_tags(args, { client }) {
       return successResult(await client.listAutoTags(args));
+    },
+    async get_auto_tag(args, { client }) {
+      return successResult(await client.getAutoTag(args.id as number | string));
+    },
+    async bulk_find_auto_tags(args, { client }) {
+      return successResult(await client.bulkFindAutoTags(args.tag_names as string[]));
+    },
+    async delete_auto_tag(args, { client }) {
+      await client.deleteAutoTag(args.id as number | string);
+      return successResult({ success: true });
     },
 
     // Taxonomies
