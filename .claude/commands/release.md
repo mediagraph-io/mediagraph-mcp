@@ -23,11 +23,17 @@ Release a new version of the package to npm and GitHub.
 ## Usage
 
 ```
-/release [version]
+/release <otp>
+/release <version> <otp>
 ```
 
-- `version`: The version to release (e.g., `1.0.2`, `patch`, `minor`, `major`)
-  - If not provided, default to `patch`
+- `otp`: **Required** - npm one-time password for publishing
+- `version`: The version to release (e.g., `patch`, `minor`, `major`, or specific like `1.0.2`)
+  - If not provided, defaults to `patch`
+
+Examples:
+- `/release 123456` - patch release with OTP
+- `/release minor 123456` - minor release with OTP
 
 ## Steps
 
@@ -58,7 +64,7 @@ Release a new version of the package to npm and GitHub.
    git push origin master
    ```
 
-6. **Publish to npm** (requires OTP from user)
+6. **Publish to npm** using the OTP from the command arguments
    ```bash
    npm publish --access public --otp=<otp>
    ```
