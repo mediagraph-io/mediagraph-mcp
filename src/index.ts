@@ -15,6 +15,8 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { exec } from 'node:child_process';
+import { platform } from 'node:os';
 
 import { OAuthHandler, type TokenData } from './auth/oauth.js';
 import { TokenStore, type StoredTokens } from './auth/token-store.js';
@@ -45,6 +47,72 @@ const oauthHandler = new OAuthHandler({
 
 // Token management
 let currentTokens: TokenData | null = null;
+let isAuthInProgress = false;
+
+/**
+ * Open a URL in the default browser (cross-platform)
+ */
+function openBrowser(url: string): void {
+  const command = platform() === 'darwin'
+    ? `open "${url}"`
+    : platform() === 'win32'
+      ? `start "" "${url}"`
+      : `xdg-open "${url}"`;
+
+  exec(command, (error) => {
+    if (error) {
+      console.error('Failed to open browser:', error);
+    }
+  });
+}
+
+/**
+ * Run the full OAuth flow automatically
+ * Returns true if successful, false otherwise
+ */
+async function runAutoAuth(): Promise<boolean> {
+  if (isAuthInProgress) {
+    // Wait for existing auth to complete
+    while (isAuthInProgress) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return currentTokens !== null;
+  }
+
+  isAuthInProgress = true;
+
+  try {
+    const authUrl = oauthHandler.getAuthorizationUrl();
+
+    // Open the browser automatically
+    openBrowser(authUrl);
+
+    // Wait for the OAuth callback
+    const { code } = await oauthHandler.waitForCallback();
+
+    // Exchange code for tokens
+    const tokens = await oauthHandler.exchangeCode(code);
+    currentTokens = tokens;
+
+    // Get user info and store tokens
+    const whoami = await client.whoami();
+    const storedData: StoredTokens = {
+      tokens,
+      organizationId: whoami.organization.id,
+      organizationName: whoami.organization.name,
+      userId: whoami.user.id,
+      userEmail: whoami.user.email,
+    };
+    tokenStore.save(storedData);
+
+    return true;
+  } catch (error) {
+    console.error('Auto-auth failed:', error);
+    return false;
+  } finally {
+    isAuthInProgress = false;
+  }
+}
 
 async function getAccessToken(): Promise<string | null> {
   // First check if we have valid tokens in memory
@@ -115,28 +183,34 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  // Check authentication for non-auth tools
-  const token = await getAccessToken();
+  // Check authentication - auto-trigger OAuth if needed
+  let token = await getAccessToken();
   if (!token) {
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Not authenticated with Mediagraph. Please run the authorization flow first.
-
-To authorize:
-1. Run: npx @mediagraph/mcp authorize
-2. Complete the OAuth flow in your browser
-3. Return here and try again
-
-Or set your credentials via environment variables:
-- MEDIAGRAPH_CLIENT_ID (required)
-- MEDIAGRAPH_CLIENT_SECRET (optional, for confidential clients)
-`,
-        },
-      ],
-      isError: true,
-    };
+    // Automatically start OAuth flow
+    const authSuccess = await runAutoAuth();
+    if (!authSuccess) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Failed to authenticate with Mediagraph. Please try again or check your browser for the authorization window.',
+          },
+        ],
+        isError: true,
+      };
+    }
+    token = await getAccessToken();
+    if (!token) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'Authentication completed but failed to retrieve access token. Please try again.',
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   const result = await handleTool(name, (args || {}) as Record<string, unknown>, toolContext);
@@ -155,7 +229,14 @@ server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
 
 // Handle resource listing
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  const token = await getAccessToken();
+  let token = await getAccessToken();
+  if (!token) {
+    const authSuccess = await runAutoAuth();
+    if (!authSuccess) {
+      return { resources: [] };
+    }
+    token = await getAccessToken();
+  }
   if (!token) {
     return { resources: [] };
   }
@@ -168,14 +249,29 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const { uri } = request.params;
 
-  const token = await getAccessToken();
+  let token = await getAccessToken();
+  if (!token) {
+    const authSuccess = await runAutoAuth();
+    if (!authSuccess) {
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/plain',
+            text: 'Failed to authenticate with Mediagraph. Please try again.',
+          },
+        ],
+      };
+    }
+    token = await getAccessToken();
+  }
   if (!token) {
     return {
       contents: [
         {
           uri,
           mimeType: 'text/plain',
-          text: 'Not authenticated with Mediagraph. Please authorize first.',
+          text: 'Authentication completed but failed to retrieve access token.',
         },
       ],
     };
