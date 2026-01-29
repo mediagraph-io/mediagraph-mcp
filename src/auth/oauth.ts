@@ -93,10 +93,15 @@ export class OAuthHandler {
     return `${this.config.oauthUrl}/oauth/authorize?${params.toString()}`;
   }
 
+  private callbackPromise: {
+    resolve: (result: OAuthCallbackResult) => void;
+    reject: (error: Error) => void;
+  } | null = null;
+
   /**
-   * Start a local HTTP server to receive the OAuth callback
+   * Start the callback server and wait for it to be ready
    */
-  async waitForCallback(): Promise<OAuthCallbackResult> {
+  async startCallbackServer(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.callbackServer = createServer((req: IncomingMessage, res: ServerResponse) => {
         const url = new URL(req.url || '/', `http://localhost:${this.config.redirectPort}`);
@@ -119,7 +124,8 @@ export class OAuthHandler {
               </html>
             `);
             this.stopCallbackServer();
-            reject(new Error(errorDescription || error));
+            this.callbackPromise?.reject(new Error(errorDescription || error));
+            this.callbackPromise = null;
             return;
           }
 
@@ -135,7 +141,8 @@ export class OAuthHandler {
               </html>
             `);
             this.stopCallbackServer();
-            reject(new Error('Missing authorization code or state'));
+            this.callbackPromise?.reject(new Error('Missing authorization code or state'));
+            this.callbackPromise = null;
             return;
           }
 
@@ -151,7 +158,8 @@ export class OAuthHandler {
               </html>
             `);
             this.stopCallbackServer();
-            reject(new Error('State parameter mismatch'));
+            this.callbackPromise?.reject(new Error('State parameter mismatch'));
+            this.callbackPromise = null;
             return;
           }
 
@@ -167,23 +175,49 @@ export class OAuthHandler {
           `);
 
           this.stopCallbackServer();
-          resolve({ code, state });
+          this.callbackPromise?.resolve({ code, state });
+          this.callbackPromise = null;
         } else {
           res.writeHead(404);
           res.end('Not found');
         }
       });
 
-      this.callbackServer.listen(this.config.redirectPort, () => {
-        // Server is listening
+      this.callbackServer.on('error', (err) => {
+        reject(err);
       });
+
+      this.callbackServer.listen(this.config.redirectPort, () => {
+        // Server is now listening and ready
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Wait for the OAuth callback (server must be started first)
+   */
+  async waitForCallback(): Promise<OAuthCallbackResult> {
+    return new Promise((resolve, reject) => {
+      this.callbackPromise = { resolve, reject };
 
       // Timeout after 5 minutes
       setTimeout(() => {
-        this.stopCallbackServer();
-        reject(new Error('Authorization timed out'));
+        if (this.callbackPromise) {
+          this.stopCallbackServer();
+          this.callbackPromise.reject(new Error('Authorization timed out'));
+          this.callbackPromise = null;
+        }
       }, 5 * 60 * 1000);
     });
+  }
+
+  /**
+   * Start server and wait for callback (convenience method for CLI)
+   */
+  async startAndWaitForCallback(): Promise<OAuthCallbackResult> {
+    await this.startCallbackServer();
+    return this.waitForCallback();
   }
 
   /**

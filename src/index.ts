@@ -82,9 +82,13 @@ async function runAutoAuth(): Promise<boolean> {
   isAuthInProgress = true;
 
   try {
+    // Generate the auth URL (this sets up PKCE internally)
     const authUrl = oauthHandler.getAuthorizationUrl();
 
-    // Open the browser automatically
+    // Start the callback server FIRST and wait for it to be ready
+    await oauthHandler.startCallbackServer();
+
+    // NOW open the browser (server is ready to receive callback)
     openBrowser(authUrl);
 
     // Wait for the OAuth callback
@@ -108,6 +112,7 @@ async function runAutoAuth(): Promise<boolean> {
     return true;
   } catch (error) {
     console.error('Auto-auth failed:', error);
+    oauthHandler.stopCallbackServer();
     return false;
   } finally {
     isAuthInProgress = false;
@@ -296,7 +301,15 @@ async function runAuthorize(): Promise<void> {
   console.log('');
 
   const authUrl = oauthHandler.getAuthorizationUrl();
-  console.log('Please open this URL in your browser:');
+
+  // Start callback server first
+  await oauthHandler.startCallbackServer();
+
+  // Open browser automatically
+  openBrowser(authUrl);
+
+  console.log('Opening browser for authorization...');
+  console.log('If the browser does not open, please visit:');
   console.log('');
   console.log(authUrl);
   console.log('');
