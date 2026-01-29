@@ -1112,8 +1112,8 @@ export class MediagraphClient {
   }
 
   async createComment(type: string, id: number, data: { text: string }): Promise<Comment> {
-    return this.request<Comment>('POST', '/api/comments', {
-      params: { type, id },
+    // type and id must be query params even for POST
+    return this.request<Comment>('POST', `/api/comments?type=${encodeURIComponent(type)}&id=${id}`, {
       body: { comment: data },
     });
   }
