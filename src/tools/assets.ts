@@ -115,7 +115,13 @@ COMMON SEARCH FIELDS:
         type: 'object',
         properties: {
           id: idParam,
-          rendition: { type: 'string', description: 'Specific rendition (original, full, medium, small)' },
+          size: {
+            type: 'string',
+            enum: ['small', 'permalink', 'full', 'original'],
+            description: 'Maximum size for the download (default: original)',
+          },
+          watermarked: { type: 'boolean', description: 'Request watermarked version' },
+          version_number: { type: 'number', description: 'Specific version number to download' },
         },
         required: ['id'],
       },
@@ -142,9 +148,9 @@ COMMON SEARCH FIELDS:
         type: 'object',
         properties: {
           id: idParam,
-          version_number: { type: 'number', description: 'Version number to revert to' },
+          version: { type: 'number', description: 'Version number to revert to' },
         },
-        required: ['id', 'version_number'],
+        required: ['id', 'version'],
       },
     },
     {
@@ -194,7 +200,11 @@ COMMON SEARCH FIELDS:
       return successResult(await client.addTagsToAsset(args.id as number | string, args.tags as string[]));
     },
     async get_asset_download(args, { client }) {
-      return successResult(await client.getAssetDownload(args.id as number | string, args.rendition as string));
+      return successResult(await client.getAssetDownload(args.id as number | string, {
+        size: args.size as string | undefined,
+        watermarked: args.watermarked as boolean | undefined,
+        version_number: args.version_number as number | undefined,
+      }));
     },
     async get_asset_auto_tags(args, { client }) {
       return successResult(await client.getAssetAutoTags(args.id as number | string));
@@ -206,7 +216,7 @@ COMMON SEARCH FIELDS:
       return successResult(await client.getAssetDataVersions(args.asset_id as number | string));
     },
     async revert_asset(args, { client }) {
-      return successResult(await client.revertAsset(args.id as number | string, args.version_number as number));
+      return successResult(await client.revertAsset(args.id as number | string, args.version as number));
     },
     async get_asset_counts(args, { client }) {
       return successResult(await client.getAssetCounts(args as SearchParams));

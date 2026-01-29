@@ -34,21 +34,22 @@ export const adminTools: ToolModule = {
       inputSchema: {
         type: 'object',
         properties: {
-          email: { type: 'string' },
-          role: { type: 'string', enum: ['admin', 'global_content', 'global_library', 'global_tagger', 'general', 'restricted'] },
+          email: { type: 'string', description: 'Email address(es) to invite (comma/semicolon separated for multiple)' },
+          role_level: { type: 'string', enum: ['admin', 'global_content', 'global_library', 'global_tagger', 'general', 'restricted'] },
+          note: { type: 'string', description: 'Note to include in invite email' },
         },
-        required: ['email', 'role'],
+        required: ['email', 'role_level'],
       },
     },
     {
       name: 'update_invite',
-      description: 'Update an invite (change email or role)',
+      description: 'Update an invite (change role or note)',
       inputSchema: {
         type: 'object',
         properties: {
           id: idParam,
-          email: { type: 'string' },
-          role: { type: 'string', enum: ['admin', 'global_content', 'global_library', 'global_tagger', 'general', 'restricted'] },
+          role_level: { type: 'string', enum: ['admin', 'global_content', 'global_library', 'global_tagger', 'general', 'restricted'] },
+          note: { type: 'string' },
         },
         required: ['id'],
       },
@@ -193,7 +194,7 @@ export const adminTools: ToolModule = {
       return successResult(await client.listInvites(args));
     },
     async create_invite(args, { client }) {
-      return successResult(await client.createInvite(args as { email: string; role: string }));
+      return successResult(await client.createInvite(args as { email: string; role_level: string; note?: string }));
     },
     async update_invite(args, { client }) {
       const { id, ...data } = args;

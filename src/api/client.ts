@@ -332,9 +332,19 @@ export class MediagraphClient {
     return this.request<FaceTagging[]>('GET', `/api/assets/${id}/face_taggings`);
   }
 
-  async getAssetDownload(id: number | string, rendition?: string): Promise<DownloadResponse> {
+  async getAssetDownload(id: number | string, options?: {
+    size?: string;
+    watermarked?: boolean;
+    version_number?: number;
+    via?: string;
+    skip_meta?: boolean;
+  }): Promise<DownloadResponse> {
     const params: Record<string, unknown> = {};
-    if (rendition) params.rendition = rendition;
+    if (options?.size) params.size = options.size;
+    if (options?.watermarked) params.watermarked = true;
+    if (options?.version_number) params.version_number = options.version_number;
+    if (options?.via) params.via = options.via;
+    if (options?.skip_meta) params.skip_meta = true;
     return this.request<DownloadResponse>('GET', `/api/assets/${id}/download`, { params });
   }
 
@@ -342,8 +352,8 @@ export class MediagraphClient {
     return this.request('POST', `/api/assets/${id}/add_version`, { body: data });
   }
 
-  async revertAsset(id: number | string, versionNumber: number): Promise<Asset> {
-    return this.request<Asset>('POST', `/api/assets/${id}/revert`, { body: { version_number: versionNumber } });
+  async revertAsset(id: number | string, version: number): Promise<Asset> {
+    return this.request<Asset>('POST', `/api/assets/${id}/revert`, { body: { version } });
   }
 
   async requestAssetOptimization(id: number | string): Promise<Asset> {
@@ -355,19 +365,18 @@ export class MediagraphClient {
   }
 
   async removeAssetOptimizationRequest(id: number | string): Promise<Asset> {
-    return this.request<Asset>('DELETE', `/api/assets/${id}/remove_optimization_request`);
+    return this.request<Asset>('POST', `/api/assets/${id}/remove_optimization_request`);
   }
 
   async updateAssetCollectiveWork(id: number | string, data: Record<string, unknown>): Promise<Asset> {
     return this.request<Asset>('PUT', `/api/assets/${id}/update_collective_work`, { body: data });
   }
 
-  async addAssetsToGroup(assetIds: number[], groupId: number, groupType: 'Collection' | 'Lightbox'): Promise<void> {
+  async addAssetsToGroup(assetIds: number[], groupId: number): Promise<void> {
     await this.request<void>('POST', '/api/assets/add_group', {
       body: {
         ids: assetIds,
         asset_group_id: groupId,
-        type: groupType,
       },
     });
   }
@@ -460,7 +469,7 @@ export class MediagraphClient {
 
   async addAssetToLightbox(lightboxId: number | string, assetId: number | string): Promise<void> {
     // Lightboxes don't have a direct add_asset endpoint - use the assets/add_group endpoint
-    await this.addAssetsToGroup([Number(assetId)], Number(lightboxId), 'Lightbox');
+    await this.addAssetsToGroup([Number(assetId)], Number(lightboxId));
   }
 
   // ============================================================================
@@ -954,7 +963,27 @@ export class MediagraphClient {
     return this.request<BulkJob>('GET', `/api/bulk_jobs/${id}`);
   }
 
-  async createBulkJob(data: { asset_ids: number[]; action: string; params?: Record<string, unknown> }): Promise<BulkJob> {
+  async createBulkJob(data: {
+    asset_ids: number[];
+    tag_names?: string[];
+    tag_mode?: string;
+    description?: string;
+    description_mode?: string;
+    rights_package_id?: number;
+    rights_status?: string;
+    rating?: number;
+    add_asset_group_id?: number;
+    add_asset_group_type?: string;
+    remove_asset_group_id?: number;
+    remove_asset_group_type?: string;
+    custom_meta?: Record<string, unknown>;
+    run_custom_meta_field_ids?: number[];
+    cmf_overwrite_mode?: string;
+    destroy_all?: boolean;
+    restore_all?: boolean;
+    generate_alt_text?: boolean;
+    alt_text_generation_prompt?: string;
+  }): Promise<BulkJob> {
     return this.request<BulkJob>('POST', '/api/bulk_jobs', { body: { bulk_job: data } });
   }
 
@@ -1070,7 +1099,7 @@ export class MediagraphClient {
   // Comments
   // ============================================================================
 
-  async listComments(params?: PaginationParams & { commentable_type?: string; commentable_id?: number }): Promise<Comment[]> {
+  async listComments(params: PaginationParams & { type: string; id: number }): Promise<Comment[]> {
     return this.request<Comment[]>('GET', '/api/comments', { params });
   }
 
@@ -1078,11 +1107,14 @@ export class MediagraphClient {
     return this.request<Comment>('GET', `/api/comments/${id}`);
   }
 
-  async createComment(data: { body: string; commentable_type: string; commentable_id: number; parent_id?: number }): Promise<Comment> {
-    return this.request<Comment>('POST', '/api/comments', { body: { comment: data } });
+  async createComment(type: string, id: number, data: { text: string }): Promise<Comment> {
+    return this.request<Comment>('POST', '/api/comments', {
+      params: { type, id },
+      body: { comment: data },
+    });
   }
 
-  async updateComment(id: number | string, data: { body: string }): Promise<Comment> {
+  async updateComment(id: number | string, data: { text: string }): Promise<Comment> {
     return this.request<Comment>('PUT', `/api/comments/${id}`, { body: { comment: data } });
   }
 
@@ -1204,11 +1236,11 @@ export class MediagraphClient {
     return this.request<Invite>('GET', `/api/invites/${id}`);
   }
 
-  async createInvite(data: { email: string; role: string }): Promise<Invite> {
+  async createInvite(data: { email: string; role_level: string; note?: string }): Promise<Invite> {
     return this.request<Invite>('POST', '/api/invites', { body: { invite: data } });
   }
 
-  async updateInvite(id: number | string, data: Partial<{ email: string; role: string }>): Promise<Invite> {
+  async updateInvite(id: number | string, data: Partial<{ role_level: string; note?: string }>): Promise<Invite> {
     return this.request<Invite>('PUT', `/api/invites/${id}`, { body: { invite: data } });
   }
 

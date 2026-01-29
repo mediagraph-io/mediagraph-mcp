@@ -75,10 +75,9 @@ export const groupTools: ToolModule = {
         type: 'object',
         properties: {
           ids: { type: 'array', items: { type: 'number' }, description: 'Array of asset IDs to add' },
-          asset_group_id: idParam,
-          type: { type: 'string', enum: ['Collection', 'Lightbox'], description: 'Type of group to add assets to' },
+          asset_group_id: { ...idParam, description: 'ID of Collection or Lightbox' },
         },
-        required: ['ids', 'asset_group_id', 'type'],
+        required: ['ids', 'asset_group_id'],
       },
     },
 
@@ -200,7 +199,6 @@ export const groupTools: ToolModule = {
       await client.addAssetsToGroup(
         args.ids as number[],
         args.asset_group_id as number,
-        args.type as 'Collection' | 'Lightbox',
       );
       return successResult({ success: true, added_count: (args.ids as number[]).length });
     },
