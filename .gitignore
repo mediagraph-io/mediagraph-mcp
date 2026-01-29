@@ -34,3 +34,6 @@ temp/
 # Package manager locks (we use npm)
 yarn.lock
 pnpm-lock.yaml
+
+# Build artifacts
+*.mcpb

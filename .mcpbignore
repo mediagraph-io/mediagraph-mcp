@@ -1,0 +1,17 @@
+# Source files (we only need dist)
+src/
+
+# Test files
+**/*.test.ts
+**/__tests__
+
+# Git and config
+.git/
+.github/
+.claude/
+.tool-versions
+tsconfig.json
+vitest.config.ts
+
+# Docs
+CLAUDE.md

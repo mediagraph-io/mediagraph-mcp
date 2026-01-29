@@ -1,0 +1,50 @@
+{
+  "manifest_version": "0.3",
+  "name": "mediagraph",
+  "display_name": "Mediagraph",
+  "version": "1.0.1",
+  "description": "Digital asset management for AI assistants - search, organize, and manage media assets",
+  "long_description": "Mediagraph MCP provides AI assistants with access to your Mediagraph digital asset management platform. Search and browse media assets, manage collections and lightboxes, organize with tags and taxonomies, handle rights management, and more.",
+  "author": {
+    "name": "Mediagraph",
+    "url": "https://mediagraph.io"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mediagraph/mediagraph-mcp.git"
+  },
+  "homepage": "https://mediagraph.io",
+  "documentation": "https://docs.mediagraph.io",
+  "support": "https://github.com/mediagraph/mediagraph-mcp/issues",
+  "icon": "icon.png",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {}
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": false,
+  "keywords": [
+    "mediagraph",
+    "dam",
+    "digital-asset-management",
+    "media",
+    "assets",
+    "images",
+    "video",
+    "collections",
+    "metadata"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}
