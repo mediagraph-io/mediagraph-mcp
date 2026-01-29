@@ -144,7 +144,7 @@ All files are uploaded in a single upload session.`,
           guid: asset.guid,
           filename: asset.filename,
           file_size: asset.file_size,
-          content_type: asset.content_type,
+          mime_type: asset.mime_type,
         },
         upload_guid: upload.guid,
       });

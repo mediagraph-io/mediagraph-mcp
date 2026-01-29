@@ -27,7 +27,7 @@ Release a new version of the package to npm and GitHub.
 ```
 
 - `version`: The version to release (e.g., `1.0.2`, `patch`, `minor`, `major`)
-  - If not provided, prompts for version type
+  - If not provided, default to `patch`
 
 ## Steps
 
