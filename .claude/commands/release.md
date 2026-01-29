@@ -1,3 +1,19 @@
+---
+allowed-tools:
+  - Bash(npm test)
+  - Bash(npm run build)
+  - Bash(npm version:*)
+  - Bash(npm publish:*)
+  - Bash(git add:*)
+  - Bash(git commit:*)
+  - Bash(git push:*)
+  - Bash(git tag:*)
+  - Bash(gh run:*)
+  - Bash(gh release:*)
+  - Edit
+  - Read
+---
+
 # /release
 
 Release a new version of the package to npm and GitHub.
@@ -13,10 +29,11 @@ Release a new version of the package to npm and GitHub.
 
 ## Steps
 
-1. **Bump version** in package.json
+1. **Bump version** in package.json and manifest.json
    - If version is `patch`, `minor`, or `major`, use `npm version <type> --no-git-tag-version`
    - If version is a specific semver, update package.json directly
-   - Also update version in manifest.json to match
+   - **IMPORTANT**: Use the Edit tool to update the `"version"` field in manifest.json to match the new version
+   - Verify both files have the same version before proceeding
 
 2. **Run tests** to ensure everything passes
    ```bash
