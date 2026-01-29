@@ -82,30 +82,42 @@ export class TokenStore {
    * Save tokens to encrypted file
    */
   save(data: StoredTokens): void {
-    const dir = dirname(this.filePath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true, mode: 0o700 });
-    }
+    try {
+      const dir = dirname(this.filePath);
+      console.error(`[TokenStore] Saving tokens to: ${this.filePath}`);
+      if (!existsSync(dir)) {
+        console.error(`[TokenStore] Creating directory: ${dir}`);
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+      }
 
-    const encrypted = this.encrypt(JSON.stringify(data));
-    writeFileSync(this.filePath, encrypted, { mode: 0o600 });
+      const encrypted = this.encrypt(JSON.stringify(data));
+      writeFileSync(this.filePath, encrypted, { mode: 0o600 });
+      console.error(`[TokenStore] Tokens saved successfully`);
+    } catch (error) {
+      console.error(`[TokenStore] Failed to save tokens:`, error);
+      throw error;
+    }
   }
 
   /**
    * Load tokens from encrypted file
    */
   load(): StoredTokens | null {
+    console.error(`[TokenStore] Loading tokens from: ${this.filePath}`);
     if (!existsSync(this.filePath)) {
+      console.error(`[TokenStore] Token file does not exist`);
       return null;
     }
 
     try {
       const encrypted = readFileSync(this.filePath);
       const decrypted = this.decrypt(encrypted);
-      return JSON.parse(decrypted) as StoredTokens;
+      const data = JSON.parse(decrypted) as StoredTokens;
+      console.error(`[TokenStore] Tokens loaded for: ${data.userEmail || 'unknown'}`);
+      return data;
     } catch (error) {
       // If decryption fails, the file might be corrupted
-      console.error('Failed to load tokens:', error);
+      console.error('[TokenStore] Failed to load tokens:', error);
       return null;
     }
   }

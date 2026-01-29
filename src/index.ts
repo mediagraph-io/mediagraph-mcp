@@ -233,15 +233,10 @@ server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
 });
 
 // Handle resource listing
+// NOTE: Don't auto-auth here - just return empty if not authenticated
+// Auth will happen when user actually calls a tool
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
-  let token = await getAccessToken();
-  if (!token) {
-    const authSuccess = await runAutoAuth();
-    if (!authSuccess) {
-      return { resources: [] };
-    }
-    token = await getAccessToken();
-  }
+  const token = await getAccessToken();
   if (!token) {
     return { resources: [] };
   }

@@ -3,14 +3,14 @@ allowed-tools:
   - Bash(npm test)
   - Bash(npm run build)
   - Bash(npm version:*)
-  - Bash(npm publish --access public:*)
+  - Bash(npm publish --access public --otp:*)
   - Bash(git add:*)
   - Bash(git commit:*)
   - Bash(git push:*)
   - Bash(git tag:*)
-  - Bash(git tag * && git push:*)
+  - Bash(git tag v:*)
   - Bash(gh run:*)
-  - Bash(gh run watch:*)
+  - Bash(gh run watch --repo:*)
   - Bash(gh release:*)
   - Edit
   - Read
