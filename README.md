@@ -127,7 +127,7 @@ npx @mediagraph/mcp help
 | `MEDIAGRAPH_CLIENT_SECRET` | No | - | OAuth client secret (for confidential clients) |
 | `MEDIAGRAPH_API_URL` | No | `https://api.mediagraph.io` | API base URL |
 | `MEDIAGRAPH_OAUTH_URL` | No | `https://mediagraph.io` | OAuth server URL |
-| `MEDIAGRAPH_REDIRECT_PORT` | No | `3000` | Local callback port for OAuth |
+| `MEDIAGRAPH_REDIRECT_PORT` | No | `52584` | Local callback port for OAuth |
 
 ## Security
 

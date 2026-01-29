@@ -28,7 +28,7 @@ const config = {
   clientSecret: process.env.MEDIAGRAPH_CLIENT_SECRET,
   apiUrl: process.env.MEDIAGRAPH_API_URL || 'https://api.mediagraph.io',
   oauthUrl: process.env.MEDIAGRAPH_OAUTH_URL || 'https://mediagraph.io',
-  redirectPort: parseInt(process.env.MEDIAGRAPH_REDIRECT_PORT || '3000', 10),
+  redirectPort: parseInt(process.env.MEDIAGRAPH_REDIRECT_PORT || '52584', 10),
 };
 
 // Initialize components
@@ -320,7 +320,7 @@ Environment Variables:
   MEDIAGRAPH_CLIENT_SECRET   Your OAuth client secret (optional)
   MEDIAGRAPH_API_URL         API URL (default: https://api.mediagraph.io)
   MEDIAGRAPH_OAUTH_URL       OAuth URL (default: https://mediagraph.io)
-  MEDIAGRAPH_REDIRECT_PORT   Local callback port (default: 3000)
+  MEDIAGRAPH_REDIRECT_PORT   Local callback port (default: 52584)
 
 Example:
   # First, authorize with Mediagraph

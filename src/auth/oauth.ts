@@ -40,7 +40,7 @@ export class OAuthHandler {
       clientId: config.clientId,
       clientSecret: config.clientSecret,
       oauthUrl: config.oauthUrl || 'https://mediagraph.io',
-      redirectPort: config.redirectPort || 3000,
+      redirectPort: config.redirectPort || 52584,
       scopes: config.scopes || ['read', 'write'],
     };
   }
