@@ -22,9 +22,12 @@ import { MediagraphClient } from './api/client.js';
 import { toolDefinitions, handleTool, type ToolContext } from './tools/index.js';
 import { resourceTemplates, readResource, listResources, type ResourceContext } from './resources/index.js';
 
-// Configuration from environment variables
+// Default OAuth client ID for the official Mediagraph MCP Server
+const DEFAULT_CLIENT_ID = '7Y8rlAetr9IK2N91X4wCvVlo2hQLX6nJvFY1N8CY0GI';
+
+// Configuration from environment variables (with sensible defaults)
 const config = {
-  clientId: process.env.MEDIAGRAPH_CLIENT_ID || '',
+  clientId: process.env.MEDIAGRAPH_CLIENT_ID || DEFAULT_CLIENT_ID,
   clientSecret: process.env.MEDIAGRAPH_CLIENT_SECRET,
   apiUrl: process.env.MEDIAGRAPH_API_URL || 'https://api.mediagraph.io',
   oauthUrl: process.env.MEDIAGRAPH_OAUTH_URL || 'https://mediagraph.io',
@@ -315,16 +318,16 @@ Commands:
   status        Show current authentication status
   help          Show this help message
 
-Environment Variables:
-  MEDIAGRAPH_CLIENT_ID       Your OAuth client ID (required)
-  MEDIAGRAPH_CLIENT_SECRET   Your OAuth client secret (optional)
+Environment Variables (all optional):
+  MEDIAGRAPH_CLIENT_ID       Override default OAuth client ID
+  MEDIAGRAPH_CLIENT_SECRET   OAuth client secret (for confidential clients)
   MEDIAGRAPH_API_URL         API URL (default: https://api.mediagraph.io)
   MEDIAGRAPH_OAUTH_URL       OAuth URL (default: https://mediagraph.io)
   MEDIAGRAPH_REDIRECT_PORT   Local callback port (default: 52584)
 
 Example:
   # First, authorize with Mediagraph
-  MEDIAGRAPH_CLIENT_ID=your-client-id npx @mediagraph/mcp authorize
+  npx @mediagraph/mcp authorize
 
   # Then configure Claude Desktop to use the MCP server
   # See README for configuration details

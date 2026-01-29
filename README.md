@@ -25,22 +25,15 @@ npx @mediagraph/mcp
 
 ## Quick Start
 
-### 1. Get OAuth Credentials
-
-1. Log into your Mediagraph organization
-2. Go to **Settings > API & Integrations**
-3. Create a new OAuth application
-4. Copy the Client ID (and Client Secret if using a confidential client)
-
-### 2. Authorize
+### 1. Authorize
 
 ```bash
-MEDIAGRAPH_CLIENT_ID=your-client-id npx @mediagraph/mcp authorize
+npx @mediagraph/mcp authorize
 ```
 
-This will open a browser window for you to authorize the MCP server with your Mediagraph account.
+This will open a browser window for you to log in and authorize the MCP server with your Mediagraph account.
 
-### 3. Configure Claude Desktop
+### 2. Configure Claude Desktop
 
 Add the following to your Claude Desktop configuration file:
 
@@ -52,16 +45,13 @@ Add the following to your Claude Desktop configuration file:
   "mcpServers": {
     "mediagraph": {
       "command": "npx",
-      "args": ["@mediagraph/mcp"],
-      "env": {
-        "MEDIAGRAPH_CLIENT_ID": "your-client-id"
-      }
+      "args": ["@mediagraph/mcp"]
     }
   }
 }
 ```
 
-### 4. Start Using
+### 3. Start Using
 
 Restart Claude Desktop and you can now ask Claude to:
 
@@ -121,13 +111,15 @@ npx @mediagraph/mcp help
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `MEDIAGRAPH_CLIENT_ID` | Yes | - | OAuth client ID |
-| `MEDIAGRAPH_CLIENT_SECRET` | No | - | OAuth client secret (for confidential clients) |
-| `MEDIAGRAPH_API_URL` | No | `https://api.mediagraph.io` | API base URL |
-| `MEDIAGRAPH_OAUTH_URL` | No | `https://mediagraph.io` | OAuth server URL |
-| `MEDIAGRAPH_REDIRECT_PORT` | No | `52584` | Local callback port for OAuth |
+All environment variables are optional. The default configuration works out of the box.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MEDIAGRAPH_CLIENT_ID` | *(built-in)* | OAuth client ID (override for custom apps) |
+| `MEDIAGRAPH_CLIENT_SECRET` | - | OAuth client secret (for confidential clients) |
+| `MEDIAGRAPH_API_URL` | `https://api.mediagraph.io` | API base URL |
+| `MEDIAGRAPH_OAUTH_URL` | `https://mediagraph.io` | OAuth server URL |
+| `MEDIAGRAPH_REDIRECT_PORT` | `52584` | Local callback port for OAuth |
 
 ## Security
 
