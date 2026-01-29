@@ -18,6 +18,7 @@ import { metaTools } from './meta.js';
 import { workflowTools } from './workflows.js';
 import { socialTools } from './social.js';
 import { downloadTools } from './downloads.js';
+import { uploadTools } from './uploads.js';
 import { webhookTools } from './webhooks.js';
 import { adminTools } from './admin.js';
 
@@ -38,6 +39,7 @@ const allToolModules: ToolModule[] = [
   workflowTools,
   socialTools,
   downloadTools,
+  uploadTools,
   webhookTools,
   adminTools,
 ];
@@ -83,6 +85,7 @@ export {
   workflowTools,
   socialTools,
   downloadTools,
+  uploadTools,
   webhookTools,
   adminTools,
 };

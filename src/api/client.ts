@@ -823,6 +823,49 @@ export class MediagraphClient {
     await this.request<void>('POST', `/api/uploads/${guid}/assets`, { body: { asset_ids: assetIds } });
   }
 
+  /**
+   * Prepare an asset for upload - returns a signed URL for direct S3 upload
+   */
+  async prepareAssetUpload(
+    uploadGuid: string,
+    data: {
+      filename: string;
+      file_size: number;
+      path?: string;
+      created_via?: string;
+      created_via_id?: string;
+    },
+  ): Promise<Asset & { signed_upload_url: string }> {
+    return this.request<Asset & { signed_upload_url: string }>('POST', `/api/uploads/${uploadGuid}/assets`, {
+      body: { asset: data },
+    });
+  }
+
+  /**
+   * Mark an asset as uploaded (triggers processing)
+   */
+  async setAssetUploaded(assetGuid: string, skipMeta?: boolean): Promise<Asset> {
+    const params = skipMeta ? { skip_meta: 'true' } : undefined;
+    return this.request<Asset>('GET', `/api/assets/${assetGuid}/set_uploaded`, { params });
+  }
+
+  /**
+   * Upload file data directly to a signed S3 URL
+   */
+  async uploadToSignedUrl(signedUrl: string, fileData: Buffer | Uint8Array, contentType: string): Promise<void> {
+    const response = await fetch(signedUrl, {
+      method: 'PUT',
+      body: fileData,
+      headers: {
+        'Content-Type': contentType,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to upload to S3: ${response.status} ${response.statusText}`);
+    }
+  }
+
   async setUploadDone(id: number | string): Promise<Upload> {
     return this.request<Upload>('POST', `/api/uploads/${id}/set_done`);
   }

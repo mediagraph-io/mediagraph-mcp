@@ -6,6 +6,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toolDefinitions, handleTool, successResult, errorResult } from '../tools/index.js';
 import type { MediagraphClient } from '../api/client.js';
 
+// Mock fs/promises
+vi.mock('node:fs/promises', () => ({
+  readFile: vi.fn().mockResolvedValue(Buffer.from('fake image data')),
+  stat: vi.fn().mockResolvedValue({
+    isFile: () => true,
+    size: 1000,
+  }),
+}));
+
 // Mock client factory
 function createMockClient(overrides: Partial<MediagraphClient> = {}): MediagraphClient {
   return {
@@ -109,6 +118,11 @@ function createMockClient(overrides: Partial<MediagraphClient> = {}): Mediagraph
     createCropPreset: vi.fn().mockResolvedValue({ id: 1, name: 'New Preset', width: 1920, height: 1080 }),
     canUpload: vi.fn().mockResolvedValue({ can_upload: true }),
     listUploads: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, per_page: 25 }),
+    createUpload: vi.fn().mockResolvedValue({ id: 1, guid: 'upload123', created_at: '2024-01-01' }),
+    prepareAssetUpload: vi.fn().mockResolvedValue({ id: 1, guid: 'asset123', filename: 'test.jpg', signed_upload_url: 'https://s3.example.com/presigned' }),
+    uploadToSignedUrl: vi.fn().mockResolvedValue(undefined),
+    setAssetUploaded: vi.fn().mockResolvedValue({ id: 1, guid: 'asset123', filename: 'test.jpg', file_size: 1000, content_type: 'image/jpeg' }),
+    setUploadDone: vi.fn().mockResolvedValue({ id: 1, guid: 'upload123', done_at: '2024-01-01' }),
     listContributions: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, per_page: 25 }),
     getContribution: vi.fn().mockResolvedValue({ id: 1, created_at: '2024-01-01' }),
     listMetaImports: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, per_page: 25 }),
@@ -167,6 +181,10 @@ describe('Tool Definitions', () => {
     // Tag tools
     expect(toolNames).toContain('list_tags');
     expect(toolNames).toContain('create_tag');
+
+    // Upload tools
+    expect(toolNames).toContain('upload_file');
+    expect(toolNames).toContain('upload_files');
   });
 });
 
@@ -272,6 +290,55 @@ describe('Tool Handlers', () => {
         name: 'New Collection',
         description: 'A test collection',
       });
+    });
+  });
+
+  describe('upload_file', () => {
+    it('should upload a file', async () => {
+      const result = await handleTool('upload_file', {
+        file_path: '/path/to/test.jpg',
+      }, { client: mockClient });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.message).toContain('Successfully uploaded');
+      expect(data.asset).toBeDefined();
+      expect(data.upload_guid).toBe('upload123');
+
+      // Verify the upload flow was called correctly
+      expect(mockClient.createUpload).toHaveBeenCalled();
+      expect(mockClient.prepareAssetUpload).toHaveBeenCalledWith('upload123', {
+        filename: 'test.jpg',
+        file_size: 1000,
+        created_via: 'mcp',
+      });
+      expect(mockClient.uploadToSignedUrl).toHaveBeenCalled();
+      expect(mockClient.setAssetUploaded).toHaveBeenCalledWith('asset123');
+      expect(mockClient.setUploadDone).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('upload_files', () => {
+    it('should upload multiple files', async () => {
+      const result = await handleTool('upload_files', {
+        file_paths: ['/path/to/test1.jpg', '/path/to/test2.png'],
+      }, { client: mockClient });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.message).toContain('Uploaded 2 of 2 files');
+      expect(data.results).toHaveLength(2);
+      expect(data.results[0].success).toBe(true);
+      expect(data.results[1].success).toBe(true);
+    });
+
+    it('should return error when no files provided', async () => {
+      const result = await handleTool('upload_files', {
+        file_paths: [],
+      }, { client: mockClient });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('No files provided');
     });
   });
 
