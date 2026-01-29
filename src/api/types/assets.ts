@@ -293,6 +293,7 @@ export interface SearchParams {
   as_filters?: boolean;
   include_renditions?: boolean;
   include_meta?: boolean;
+  [key: string]: unknown;
 }
 
 export interface SearchResponse {

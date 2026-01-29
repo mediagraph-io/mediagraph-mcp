@@ -167,7 +167,7 @@ export class MediagraphClient {
         if (!response.ok) {
           let errorBody: ApiError;
           try {
-            errorBody = await response.json();
+            errorBody = (await response.json()) as ApiError;
           } catch {
             errorBody = { error: 'unknown_error', message: response.statusText };
           }

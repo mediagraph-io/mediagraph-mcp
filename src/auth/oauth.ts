@@ -225,7 +225,10 @@ export class OAuthHandler {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'unknown_error' }));
+      const error = (await response.json().catch(() => ({ error: 'unknown_error' }))) as {
+        error?: string;
+        error_description?: string;
+      };
       throw new Error(`Token exchange failed: ${error.error_description || error.error}`);
     }
 
@@ -264,7 +267,10 @@ export class OAuthHandler {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'unknown_error' }));
+      const error = (await response.json().catch(() => ({ error: 'unknown_error' }))) as {
+        error?: string;
+        error_description?: string;
+      };
       throw new Error(`Token refresh failed: ${error.error_description || error.error}`);
     }
 

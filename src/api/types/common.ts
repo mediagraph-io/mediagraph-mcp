@@ -9,6 +9,7 @@ export interface PaginationParams {
   pageSize?: number;
   sortField?: string;
   sortOrder?: 'ascend' | 'descend';
+  [key: string]: unknown;
 }
 
 export interface PaginatedResponse<T> {
