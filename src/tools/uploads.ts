@@ -55,7 +55,10 @@ export const uploadTools: ToolModule = {
   definitions: [
     {
       name: 'upload_file',
-      description: `Upload a file from the local filesystem to Mediagraph.
+      description: `Upload a file to Mediagraph. Supports two modes:
+1. Local file: Provide file_path for files on the user's local filesystem
+2. Direct upload: Provide file_data (base64-encoded) with filename for files from other sources
+
 This creates a new asset in the user's Mediagraph library.
 Supports images, videos, audio, documents, and other media files.
 The file will be processed and thumbnails/previews generated automatically.`,
@@ -66,12 +69,20 @@ The file will be processed and thumbnails/previews generated automatically.`,
             type: 'string',
             description: 'Absolute path to the file on the local filesystem',
           },
+          file_data: {
+            type: 'string',
+            description: 'Base64-encoded file content (use this when file_path is not available)',
+          },
+          filename: {
+            type: 'string',
+            description: 'Filename with extension (required when using file_data)',
+          },
           storage_folder_id: {
             type: 'number',
             description: 'Optional: ID of the storage folder to upload into',
           },
         },
-        required: ['file_path'],
+        required: [],
       },
     },
     {
@@ -99,23 +110,42 @@ All files are uploaded in a single upload session.`,
 
   handlers: {
     async upload_file(args, { client }) {
-      const filePath = args.file_path as string;
+      const filePath = args.file_path as string | undefined;
+      const fileDataB64 = args.file_data as string | undefined;
+      const providedFilename = args.filename as string | undefined;
 
-      // Check if file exists and get stats
-      let fileStats;
-      try {
-        fileStats = await stat(filePath);
-      } catch {
-        return errorResult(`File not found: ${filePath}`);
+      let fileData: Buffer;
+      let filename: string;
+      let fileSize: number;
+
+      if (fileDataB64) {
+        // Mode 2: Direct upload with base64 data
+        if (!providedFilename) {
+          return errorResult('filename is required when using file_data');
+        }
+        fileData = Buffer.from(fileDataB64, 'base64');
+        filename = providedFilename;
+        fileSize = fileData.length;
+      } else if (filePath) {
+        // Mode 1: Local file path
+        let fileStats;
+        try {
+          fileStats = await stat(filePath);
+        } catch {
+          return errorResult(`File not found: ${filePath}`);
+        }
+
+        if (!fileStats.isFile()) {
+          return errorResult(`Not a file: ${filePath}`);
+        }
+
+        fileData = await readFile(filePath);
+        filename = basename(filePath);
+        fileSize = fileStats.size;
+      } else {
+        return errorResult('Either file_path or file_data (with filename) is required');
       }
 
-      if (!fileStats.isFile()) {
-        return errorResult(`Not a file: ${filePath}`);
-      }
-
-      // Read file
-      const fileData = await readFile(filePath);
-      const filename = basename(filePath);
       const contentType = getMimeType(filename);
 
       // Create upload session
@@ -124,7 +154,7 @@ All files are uploaded in a single upload session.`,
       // Prepare asset upload (get signed URL)
       const preparedAsset = await client.prepareAssetUpload(upload.guid, {
         filename,
-        file_size: fileStats.size,
+        file_size: fileSize,
         created_via: 'mcp',
       });
 
