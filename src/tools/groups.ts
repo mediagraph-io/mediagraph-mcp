@@ -67,6 +67,21 @@ export const groupTools: ToolModule = {
       inputSchema: { type: 'object', properties: {}, required: [] },
     },
 
+    // Multi-asset group operations
+    {
+      name: 'add_assets_to_group',
+      description: 'Add multiple assets to a Collection or Lightbox at once',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ids: { type: 'array', items: { type: 'number' }, description: 'Array of asset IDs to add' },
+          asset_group_id: idParam,
+          type: { type: 'string', enum: ['Collection', 'Lightbox'], description: 'Type of group to add assets to' },
+        },
+        required: ['ids', 'asset_group_id', 'type'],
+      },
+    },
+
     // Lightboxes
     {
       name: 'list_lightboxes',
@@ -180,6 +195,14 @@ export const groupTools: ToolModule = {
     },
     async get_collections_tree(_args, { client }) {
       return successResult(await client.getCollectionsTree());
+    },
+    async add_assets_to_group(args, { client }) {
+      await client.addAssetsToGroup(
+        args.ids as number[],
+        args.asset_group_id as number,
+        args.type as 'Collection' | 'Lightbox',
+      );
+      return successResult({ success: true, added_count: (args.ids as number[]).length });
     },
 
     // Lightboxes

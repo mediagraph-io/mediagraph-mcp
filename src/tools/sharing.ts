@@ -19,18 +19,27 @@ export const sharingTools: ToolModule = {
     },
     {
       name: 'create_share_link',
-      description: 'Create a share link for assets, collection, or lightbox',
+      description: 'Create a share link for a Collection, Lightbox, or Storage Folder',
       inputSchema: {
         type: 'object',
         properties: {
-          asset_ids: { type: 'array', items: { type: 'number' } },
-          collection_id: { type: 'number' },
-          lightbox_id: { type: 'number' },
-          name: { type: 'string' },
-          password: { type: 'string' },
-          expires_at: { type: 'string' },
+          asset_group_id: { ...idParam, description: 'ID of the Collection, Lightbox, or Storage Folder to share' },
+          enabled: { type: 'boolean', description: 'Enable the share link (default: true)' },
+          image_and_video_permission: {
+            type: 'string',
+            enum: ['view', 'download_small', 'download_large', 'download_original'],
+            description: 'Permission level for images and videos',
+          },
+          other_permission: {
+            type: 'string',
+            enum: ['view', 'download'],
+            description: 'Permission level for other file types',
+          },
+          watermark_all: { type: 'boolean', description: 'Apply watermark to all downloads' },
+          note: { type: 'string', description: 'Internal note' },
+          expires_at: { type: 'string', description: 'Expiration date/time in ISO 8601 format' },
         },
-        required: [],
+        required: ['asset_group_id'],
       },
     },
     {
@@ -74,12 +83,13 @@ export const sharingTools: ToolModule = {
       return successResult(await client.getShareLink(args.id as number | string));
     },
     async create_share_link(args, { client }) {
-      return successResult(await client.createShareLink(args as {
-        asset_ids?: number[];
-        collection_id?: number;
-        lightbox_id?: number;
-        name?: string;
-        password?: string;
+      const { asset_group_id, ...data } = args;
+      return successResult(await client.createShareLink(asset_group_id as number | string, data as {
+        enabled?: boolean;
+        image_and_video_permission?: string;
+        other_permission?: string;
+        watermark_all?: boolean;
+        note?: string;
         expires_at?: string;
       }));
     },

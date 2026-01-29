@@ -145,7 +145,7 @@ export const adminTools: ToolModule = {
     // Contributions
     {
       name: 'list_contributions',
-      description: 'List contribution portals',
+      description: 'List contribution portals (upload links). Use contribution_id with upload_file/upload_files to upload to a specific storage folder or lightbox.',
       inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
     },
     {

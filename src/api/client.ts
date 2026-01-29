@@ -321,7 +321,7 @@ export class MediagraphClient {
   }
 
   async addTagsToAsset(id: number | string, tags: string[]): Promise<Asset> {
-    return this.request<Asset>('POST', `/api/assets/${id}/tag`, { body: { tags } });
+    return this.request<Asset>('PUT', `/api/assets/${id}/tag`, { body: { asset: { add_tag_names: tags } } });
   }
 
   async getAssetAutoTags(id: number | string): Promise<AutoTag[]> {
@@ -364,7 +364,11 @@ export class MediagraphClient {
 
   async addAssetsToGroup(assetIds: number[], groupId: number, groupType: 'Collection' | 'Lightbox'): Promise<void> {
     await this.request<void>('POST', '/api/assets/add_group', {
-      body: { asset_ids: assetIds, group_id: groupId, group_type: groupType },
+      body: {
+        ids: assetIds,
+        asset_group_id: groupId,
+        type: groupType,
+      },
     });
   }
 
@@ -413,7 +417,9 @@ export class MediagraphClient {
   }
 
   async getCollectionVisibleAssetCounts(ids: number[]): Promise<Record<number, number>> {
-    return this.request<Record<number, number>>('GET', '/api/collections/visible_asset_counts', { params: { ids } });
+    return this.request<Record<number, number>>('POST', '/api/collections/visible_asset_counts', {
+      body: { asset_groups: ids.map(id => ({ id })) },
+    });
   }
 
   async addAssetToCollection(collectionId: number | string, assetId: number | string): Promise<void> {
@@ -453,7 +459,8 @@ export class MediagraphClient {
   }
 
   async addAssetToLightbox(lightboxId: number | string, assetId: number | string): Promise<void> {
-    await this.request<void>('POST', `/api/lightboxes/${lightboxId}/add_asset`, { body: { asset_id: assetId } });
+    // Lightboxes don't have a direct add_asset endpoint - use the assets/add_group endpoint
+    await this.addAssetsToGroup([Number(assetId)], Number(lightboxId), 'Lightbox');
   }
 
   // ============================================================================
@@ -517,11 +524,11 @@ export class MediagraphClient {
   }
 
   async addTagToTaxonomy(id: number | string, taxonomyId: number): Promise<Tag> {
-    return this.request<Tag>('POST', `/api/tags/${id}/add_taxonomy`, { body: { taxonomy_id: taxonomyId } });
+    return this.request<Tag>('PUT', `/api/tags/${id}/add_taxonomy`, { body: { taxonomy_id: taxonomyId } });
   }
 
   async mergeTagInto(id: number | string, targetTagId: number): Promise<void> {
-    await this.request<void>('POST', `/api/tags/${id}/merge_into`, { body: { target_tag_id: targetTagId } });
+    await this.request<void>('POST', `/api/tags/${id}/merge_into`, { body: { tag_2_id: targetTagId } });
   }
 
   async getTagEvents(params?: PaginationParams): Promise<unknown[]> {
@@ -700,15 +707,18 @@ export class MediagraphClient {
     return this.request<ShareLink>('GET', `/api/share_links/${id}`);
   }
 
-  async createShareLink(data: {
-    asset_ids?: number[];
-    collection_id?: number;
-    lightbox_id?: number;
-    name?: string;
-    password?: string;
+  async createShareLink(assetGroupId: number | string, data?: {
+    enabled?: boolean;
+    image_and_video_permission?: string;
+    other_permission?: string;
+    watermark_all?: boolean;
+    note?: string;
+    expires?: boolean;
     expires_at?: string;
   }): Promise<ShareLink> {
-    return this.request<ShareLink>('POST', '/api/share_links', { body: { share_link: data } });
+    return this.request<ShareLink>('POST', `/api/asset_groups/${assetGroupId}/share_links`, {
+      body: data ? { share_link: data } : undefined,
+    });
   }
 
   async updateShareLink(id: number | string, data: Partial<ShareLink>): Promise<ShareLink> {
@@ -811,8 +821,18 @@ export class MediagraphClient {
     return this.request<Upload[]>('GET', '/api/uploads', { params });
   }
 
-  async createUpload(): Promise<Upload> {
-    return this.request<Upload>('POST', '/api/uploads');
+  async createUpload(data?: { name?: string; note?: string; default_rights_package_id?: number }): Promise<Upload> {
+    return this.request<Upload>('POST', '/api/uploads', data ? { body: { upload: data } } : undefined);
+  }
+
+  /**
+   * Create upload session from a contribution - assets will go to the contribution's configured destination
+   */
+  async createUploadFromContribution(
+    contributionId: number | string,
+    data?: { name?: string; note?: string; default_rights_package_id?: number },
+  ): Promise<Upload> {
+    return this.request<Upload>('POST', `/api/contributions/${contributionId}/uploads`, data ? { body: { upload: data } } : undefined);
   }
 
   async getUploadAssets(guid: string, params?: PaginationParams): Promise<Asset[]> {
@@ -867,7 +887,7 @@ export class MediagraphClient {
   }
 
   async setUploadDone(id: number | string): Promise<Upload> {
-    return this.request<Upload>('POST', `/api/uploads/${id}/set_done`);
+    return this.request<Upload>('PUT', `/api/uploads/${id}/set_done`);
   }
 
   async canUpload(): Promise<CanUploadResponse> {
@@ -898,7 +918,7 @@ export class MediagraphClient {
     await this.request<void>('DELETE', `/api/contributions/${id}`);
   }
 
-  async findContribution(params: { guid?: string }): Promise<Contribution> {
+  async findContribution(params: { slug?: string }): Promise<Contribution> {
     return this.request<Contribution>('GET', '/api/contributions/find', { params });
   }
 
@@ -954,7 +974,7 @@ export class MediagraphClient {
     return this.request<BulkJob[]>('GET', '/api/bulk_jobs/processing');
   }
 
-  async previewCaiBulkJob(data: { asset_ids: number[]; custom_meta_field_ids: number[] }): Promise<unknown> {
+  async previewCaiBulkJob(data: { asset_ids: number[]; cmf_ids: number[] }): Promise<unknown> {
     return this.request('POST', '/api/bulk_jobs/cai_preview', { body: data });
   }
 
@@ -986,8 +1006,8 @@ export class MediagraphClient {
     return this.request('GET', `/api/custom_meta_fields/${id}/export`);
   }
 
-  async importCustomMetaFields(data: unknown): Promise<unknown> {
-    return this.request('POST', '/api/custom_meta_fields/import', { body: data });
+  async importCustomMetaFields(settings: string): Promise<unknown> {
+    return this.request('POST', '/api/custom_meta_fields/import', { body: { settings } });
   }
 
   async getAccessRequestCustomMetaFields(): Promise<CustomMetaField[]> {
@@ -1042,8 +1062,8 @@ export class MediagraphClient {
     await this.request<void>('DELETE', `/api/workflow_steps/${id}`);
   }
 
-  async approveWorkflowStep(id: number | string): Promise<WorkflowStep> {
-    return this.request<WorkflowStep>('POST', `/api/workflow_steps/${id}/approve`);
+  async approveWorkflowStep(id: number | string, assetIds: number[]): Promise<WorkflowStep> {
+    return this.request<WorkflowStep>('POST', `/api/workflow_steps/${id}/approve`, { body: { asset_ids: assetIds } });
   }
 
   // ============================================================================
@@ -1094,7 +1114,7 @@ export class MediagraphClient {
     return this.request<Download>('GET', `/api/downloads/${token}`);
   }
 
-  async createDownload(data: { asset_ids: number[]; rendition?: string }): Promise<Download> {
+  async createDownload(data: { asset_ids: number[]; size?: string }): Promise<Download> {
     return this.request<Download>('POST', '/api/downloads', { body: { download: data } });
   }
 
@@ -1110,7 +1130,17 @@ export class MediagraphClient {
     return this.request<Webhook>('GET', `/api/webhooks/${id}`);
   }
 
-  async createWebhook(data: { name: string; url: string; events: string[] }): Promise<Webhook> {
+  async createWebhook(data: {
+    name: string;
+    url: string;
+    events?: string;
+    enabled?: boolean;
+    asset_group_id?: number;
+    include_download_url?: boolean;
+    group_assets?: boolean;
+    trash?: boolean;
+    note?: string;
+  }): Promise<Webhook> {
     return this.request<Webhook>('POST', '/api/webhooks', { body: { webhook: data } });
   }
 
@@ -1126,8 +1156,8 @@ export class MediagraphClient {
     return this.request<WebhookLog[]>('GET', `/api/webhooks/${id}/logs`, { params });
   }
 
-  async testWebhook(data: { url: string; event: string }): Promise<unknown> {
-    return this.request('POST', '/api/webhooks/test', { body: data });
+  async testWebhook(url: string): Promise<unknown> {
+    return this.request('POST', '/api/webhooks/test', { body: { url } });
   }
 
   async getWebhookPayload(): Promise<unknown> {
@@ -1194,8 +1224,8 @@ export class MediagraphClient {
     return this.request<Invite>('GET', '/api/invites/find', { params });
   }
 
-  async checkInviteEmail(email: string): Promise<{ available: boolean }> {
-    return this.request<{ available: boolean }>('GET', '/api/invites/check_email', { params: { email } });
+  async checkInviteEmail(email: string): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>('POST', '/api/invites/check_email', { body: { email } });
   }
 
   async getAvailableRoleLevels(): Promise<string[]> {
@@ -1226,8 +1256,13 @@ export class MediagraphClient {
     await this.request<void>('DELETE', `/api/filter_groups/${id}`);
   }
 
-  async updateFilterGroupVisibility(id: number | string, shared: boolean): Promise<FilterGroup> {
-    return this.request<FilterGroup>('PUT', `/api/filter_groups/${id}/update_visibility`, { body: { shared } });
+  async updateFilterGroupVisibility(
+    id: number | string,
+    data: { name: string; type: 'explore' | 'manage'; visible: boolean },
+  ): Promise<FilterGroup> {
+    return this.request<FilterGroup>('PUT', `/api/filter_groups/${id}/update_visibility`, {
+      body: { name: data.name, type: data.type, visible: String(data.visible) },
+    });
   }
 
   // ============================================================================
@@ -1278,8 +1313,8 @@ export class MediagraphClient {
     await this.request<void>('DELETE', `/api/crop_presets/${id}`);
   }
 
-  async updateCropPresetPosition(id: number | string, position: number): Promise<CropPreset> {
-    return this.request<CropPreset>('PUT', '/api/crop_presets/update_position', { body: { id, position } });
+  async updateCropPresetPosition(oldIndex: number, newIndex: number): Promise<CropPreset> {
+    return this.request<CropPreset>('PUT', '/api/crop_presets/update_position', { body: { oldIndex, newIndex } });
   }
 
   // ============================================================================

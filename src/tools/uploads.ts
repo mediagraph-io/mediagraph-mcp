@@ -61,7 +61,10 @@ export const uploadTools: ToolModule = {
 
 This creates a new asset in the user's Mediagraph library.
 Supports images, videos, audio, documents, and other media files.
-The file will be processed and thumbnails/previews generated automatically.`,
+The file will be processed and thumbnails/previews generated automatically.
+
+By default, assets are uploaded to the default storage folder. To upload to a specific destination,
+provide a contribution_id - the asset will go to the contribution's configured storage folder or lightbox.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -77,9 +80,9 @@ The file will be processed and thumbnails/previews generated automatically.`,
             type: 'string',
             description: 'Filename with extension (required when using file_data)',
           },
-          storage_folder_id: {
+          contribution_id: {
             type: 'number',
-            description: 'Optional: ID of the storage folder to upload into',
+            description: 'Optional: ID of a contribution (upload link) to upload through. Assets will go to the contribution\'s configured storage folder or lightbox.',
           },
         },
         required: [],
@@ -89,7 +92,10 @@ The file will be processed and thumbnails/previews generated automatically.`,
       name: 'upload_files',
       description: `Upload multiple files from the local filesystem to Mediagraph.
 Creates new assets for each file in the user's Mediagraph library.
-All files are uploaded in a single upload session.`,
+All files are uploaded in a single upload session.
+
+By default, assets are uploaded to the default storage folder. To upload to a specific destination,
+provide a contribution_id - assets will go to the contribution's configured storage folder or lightbox.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -98,9 +104,9 @@ All files are uploaded in a single upload session.`,
             items: { type: 'string' },
             description: 'Array of absolute paths to files on the local filesystem',
           },
-          storage_folder_id: {
+          contribution_id: {
             type: 'number',
-            description: 'Optional: ID of the storage folder to upload into',
+            description: 'Optional: ID of a contribution (upload link) to upload through. Assets will go to the contribution\'s configured storage folder or lightbox.',
           },
         },
         required: ['file_paths'],
@@ -113,6 +119,7 @@ All files are uploaded in a single upload session.`,
       const filePath = args.file_path as string | undefined;
       const fileDataB64 = args.file_data as string | undefined;
       const providedFilename = args.filename as string | undefined;
+      const contributionId = args.contribution_id as number | undefined;
 
       let fileData: Buffer;
       let filename: string;
@@ -148,8 +155,10 @@ All files are uploaded in a single upload session.`,
 
       const contentType = getMimeType(filename);
 
-      // Create upload session
-      const upload = await client.createUpload();
+      // Create upload session - either from contribution or default
+      const upload = contributionId
+        ? await client.createUploadFromContribution(contributionId)
+        : await client.createUpload();
 
       // Prepare asset upload (get signed URL)
       const preparedAsset = await client.prepareAssetUpload(upload.guid, {
@@ -168,7 +177,7 @@ All files are uploaded in a single upload session.`,
       await client.setUploadDone(upload.id);
 
       return successResult({
-        message: `Successfully uploaded ${filename}`,
+        message: `Successfully uploaded ${filename}${contributionId ? ` via contribution ${contributionId}` : ''}`,
         asset: {
           id: asset.id,
           guid: asset.guid,
@@ -177,18 +186,23 @@ All files are uploaded in a single upload session.`,
           mime_type: asset.mime_type,
         },
         upload_guid: upload.guid,
+        contribution_id: contributionId,
       });
     },
 
     async upload_files(args, { client }) {
       const filePaths = args.file_paths as string[];
+      const contributionId = args.contribution_id as number | undefined;
 
       if (!filePaths || filePaths.length === 0) {
         return errorResult('No files provided');
       }
 
-      // Create single upload session for all files
-      const upload = await client.createUpload();
+      // Create single upload session for all files - either from contribution or default
+      const upload = contributionId
+        ? await client.createUploadFromContribution(contributionId)
+        : await client.createUpload();
+
       const results: Array<{ filename: string; success: boolean; asset_id?: number; asset_guid?: string; error?: string }> = [];
 
       for (const filePath of filePaths) {
@@ -235,10 +249,12 @@ All files are uploaded in a single upload session.`,
       const successCount = results.filter(r => r.success).length;
 
       return successResult({
-        message: `Uploaded ${successCount} of ${filePaths.length} files`,
+        message: `Uploaded ${successCount} of ${filePaths.length} files${contributionId ? ` via contribution ${contributionId}` : ''}`,
         upload_guid: upload.guid,
+        contribution_id: contributionId,
         results,
       });
     },
+
   },
 };
