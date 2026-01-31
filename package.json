@@ -1,6 +1,6 @@
 {
   "name": "@mediagraph/mcp",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "MCP server for Mediagraph - Media Asset Management Platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,10 +8,15 @@
     "mediagraph-mcp": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean",
+    "build": "NODE_ENV=production tsup src/index.ts --format esm --dts --clean && npm run build:app:prod",
+    "build:dev": "tsup src/index.ts --format esm --dts --clean && npm run build:app:dev",
+    "build:app:prod": "NODE_ENV=production vite build --config vite.config.ts",
+    "build:app:dev": "NODE_ENV=development vite build --config vite.config.ts",
+    "build:app": "vite build --config vite.config.ts",
     "dev": "tsup src/index.ts --format esm --watch",
+    "dev:app": "vite --config vite.config.ts",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.app.json --noEmit",
     "lint": "eslint src/**/*.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -46,13 +51,21 @@
     "LICENSE"
   ],
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.0.1",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
     "eslint": "^8.56.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsup": "^8.0.1",
     "typescript": "^5.3.3",
+    "vite": "^5.4.0",
+    "vite-plugin-singlefile": "^2.0.0",
     "vitest": "^1.1.0"
   }
 }
