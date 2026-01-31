@@ -13,6 +13,7 @@ export interface StoredTokens {
   tokens: TokenData;
   organizationId?: number;
   organizationName?: string;
+  organizationSlug?: string;
   userId?: number;
   userEmail?: string;
 }

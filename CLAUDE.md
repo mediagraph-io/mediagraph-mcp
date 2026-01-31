@@ -139,10 +139,18 @@ function createMockResponse(data: unknown, options = {}) {
 
 ## Mediagraph API Reference
 
-- API Documentation: https://docs.mediagraph.io
+- **OpenAPI Spec**: `doc/open_api.json` - Use this as the authoritative reference for all API endpoints, parameters, and response schemas
+- **Update spec**: Run `./scripts/update-openapi.sh` to copy latest from mediagraph-master repo
+- **Online docs**: https://docs.mediagraph.io
 - The API uses OAuth 2.0 with PKCE for public clients
 - Organization context is sent via `OrganizationId` header
 - Search supports advanced query syntax (AND, OR, NOT, field:value, wildcards)
+
+When adding or modifying API integrations, always consult `doc/open_api.json` for:
+- Endpoint paths and HTTP methods
+- Request parameters (query, path, body)
+- Response schemas and status codes
+- Available enum values
 
 ## Search Query Syntax
 
@@ -160,6 +168,16 @@ tag_text:*ial            # Wildcard (ends with)
 NOT tag_text:**          # Assets without tags
 (dog OR cat) AND ext:jpg # Complex grouping
 ```
+
+## MCP App Development
+
+When developing the MCP App (visual gallery UI):
+
+- **Dev build**: `npm run build:dev` - Unminified React with full error messages
+- **Prod build**: `npm run build` - Minified for production
+- **Testing changes**: Close and reopen the Claude Desktop chat thread (no need to restart the app)
+- **Logs**: Check `~/Library/Logs/Claude/mcp-server-mediagraph.log`
+- **Console**: In Claude Desktop: View → Toggle Developer Tools → Console tab
 
 ## Git Workflow
 

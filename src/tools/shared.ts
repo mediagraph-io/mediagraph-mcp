@@ -6,6 +6,7 @@ import type { MediagraphClient } from '../api/client.js';
 
 export interface ToolContext {
   client: MediagraphClient;
+  organizationSlug?: string;
 }
 
 export interface ToolResultContent {
@@ -25,6 +26,14 @@ export interface ToolDefinition {
     type: string;
     properties: Record<string, unknown>;
     required: string[];
+  };
+  // MCP Apps metadata for tools with UI
+  _meta?: {
+    ui?: {
+      resourceUri: string;
+      visibility?: ('model' | 'app')[];
+    };
+    [key: string]: unknown;
   };
 }
 

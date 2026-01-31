@@ -21,6 +21,7 @@ import { downloadTools } from './downloads.js';
 import { uploadTools } from './uploads.js';
 import { webhookTools } from './webhooks.js';
 import { adminTools } from './admin.js';
+import { appTools } from './app.js';
 
 // Re-export types
 export type { ToolContext, ToolResult, ToolDefinition, ToolModule };
@@ -42,6 +43,7 @@ const allToolModules: ToolModule[] = [
   uploadTools,
   webhookTools,
   adminTools,
+  appTools,
 ];
 
 // Export combined definitions
@@ -88,4 +90,5 @@ export {
   uploadTools,
   webhookTools,
   adminTools,
+  appTools,
 };

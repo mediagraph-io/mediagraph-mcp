@@ -17,6 +17,9 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { exec } from 'node:child_process';
 import { platform } from 'node:os';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 import { OAuthHandler, type TokenData } from './auth/oauth.js';
 import { TokenStore, type StoredTokens } from './auth/token-store.js';
@@ -72,14 +75,22 @@ function openBrowser(url: string): void {
  */
 async function runAutoAuth(): Promise<boolean> {
   if (isAuthInProgress) {
-    // Wait for existing auth to complete
-    while (isAuthInProgress) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    console.error('[MCP] OAuth already in progress, waiting for completion...');
+    // Wait for existing auth to complete (max 2 minutes)
+    const waitStart = Date.now();
+    const maxWait = 120000;
+    while (isAuthInProgress && Date.now() - waitStart < maxWait) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    if (isAuthInProgress) {
+      console.error('[MCP] Timed out waiting for existing OAuth flow');
+      return false;
     }
     return currentTokens !== null;
   }
 
   isAuthInProgress = true;
+  console.error('[MCP] Starting OAuth flow...');
 
   try {
     // Generate the auth URL (this sets up PKCE internally)
@@ -87,31 +98,50 @@ async function runAutoAuth(): Promise<boolean> {
 
     // Start the callback server FIRST and wait for it to be ready
     await oauthHandler.startCallbackServer();
+    console.error('[MCP] Callback server ready, opening browser...');
 
     // NOW open the browser (server is ready to receive callback)
     openBrowser(authUrl);
 
     // Wait for the OAuth callback
+    console.error('[MCP] Waiting for OAuth callback...');
     const { code } = await oauthHandler.waitForCallback();
+    console.error('[MCP] OAuth callback received, exchanging code...');
 
     // Exchange code for tokens
     const tokens = await oauthHandler.exchangeCode(code);
     currentTokens = tokens;
+    console.error('[MCP] Token exchange successful');
 
-    // Get user info and store tokens
-    const whoami = await client.whoami();
-    const storedData: StoredTokens = {
-      tokens,
-      organizationId: whoami.organization.id,
-      organizationName: whoami.organization.name,
-      userId: whoami.user.id,
-      userEmail: whoami.user.email,
-    };
+    // Save tokens immediately (even before whoami, in case that fails)
+    let storedData: StoredTokens = { tokens };
     tokenStore.save(storedData);
+
+    // Try to get user info to enrich the stored data
+    try {
+      const whoami = await client.whoami();
+      if (whoami?.organization?.id) {
+        const org = whoami.organization;
+        storedData = {
+          tokens,
+          organizationId: org.id,
+          organizationName: org.title || org.name,
+          organizationSlug: org.slug,
+          userId: whoami.user?.id,
+          userEmail: whoami.user?.email,
+        };
+        tokenStore.save(storedData);
+        console.error(`[MCP] Authenticated as ${whoami.user?.email} in ${org.title || org.name}`);
+      } else {
+        console.error('[MCP] Authenticated (whoami returned incomplete data)');
+      }
+    } catch (whoamiError) {
+      console.error('[MCP] Authenticated (whoami failed, tokens saved):', whoamiError);
+    }
 
     return true;
   } catch (error) {
-    console.error('Auto-auth failed:', error);
+    console.error('[MCP] Auto-auth failed:', error);
     oauthHandler.stopCallbackServer();
     return false;
   } finally {
@@ -160,8 +190,17 @@ const client = new MediagraphClient({
 });
 
 // Create contexts for tools and resources
+// Note: organizationSlug is populated dynamically before each tool call
 const toolContext: ToolContext = { client };
 const resourceContext: ResourceContext = { client };
+
+/**
+ * Get organization slug from stored tokens
+ */
+function getOrganizationSlug(): string | undefined {
+  const stored = tokenStore.load();
+  return stored?.organizationSlug;
+}
 
 // Create MCP server
 const server = new Server(
@@ -191,36 +230,56 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Check authentication - auto-trigger OAuth if needed
   let token = await getAccessToken();
   if (!token) {
-    // Automatically start OAuth flow
-    const authSuccess = await runAutoAuth();
-    if (!authSuccess) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Failed to authenticate with Mediagraph. Please try again or check your browser for the authorization window.',
-          },
-        ],
-        isError: true,
-      };
+    // If OAuth is already in progress, wait for it (with a reasonable timeout)
+    if (isAuthInProgress) {
+      console.error('[MCP] OAuth in progress, waiting...');
+      const waitStart = Date.now();
+      const maxWait = 120000; // 2 minutes max wait
+      while (isAuthInProgress && Date.now() - waitStart < maxWait) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      token = await getAccessToken();
+      if (token) {
+        console.error('[MCP] OAuth completed, proceeding with request');
+      }
     }
-    token = await getAccessToken();
+
+    // Still no token? Start OAuth flow
     if (!token) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Authentication completed but failed to retrieve access token. Please try again.',
-          },
-        ],
-        isError: true,
-      };
+      // Automatically start OAuth flow
+      const authSuccess = await runAutoAuth();
+      if (!authSuccess) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Authorization is in progress. Please complete the login in your browser, then try this request again.',
+            },
+          ],
+          isError: true,
+        };
+      }
+      token = await getAccessToken();
+      if (!token) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Authentication completed but failed to retrieve access token. Please try again.',
+            },
+          ],
+          isError: true,
+        };
+      }
     }
   }
 
   // Log tool call for debugging
   console.error(`[MCP] Tool call: ${name}`);
   console.error(`[MCP] Arguments: ${JSON.stringify(args, null, 2)}`);
+
+  // Update tool context with organization slug for this request
+  toolContext.organizationSlug = getOrganizationSlug();
 
   const result = await handleTool(name, (args || {}) as Record<string, unknown>, toolContext);
 
@@ -261,6 +320,11 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const { uri } = request.params;
 
+  // Handle MCP App UI resources
+  if (uri.startsWith('ui://mediagraph/')) {
+    return handleAppResource(uri);
+  }
+
   let token = await getAccessToken();
   if (!token) {
     const authSuccess = await runAutoAuth();
@@ -294,6 +358,67 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     contents: [content],
   };
 });
+
+/**
+ * Handle MCP App UI resource requests
+ * Serves the bundled React app for visual tools
+ */
+function handleAppResource(uri: string) {
+  // Get the directory where this script is located
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+
+  // The bundled app is in dist/app/index.html
+  const appPath = join(__dirname, 'app', 'index.html');
+
+  if (!existsSync(appPath)) {
+    console.error(`[MCP] App resource not found at: ${appPath}`);
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'text/plain',
+          text: 'MCP App UI not found. Please rebuild the project with npm run build.',
+        },
+      ],
+    };
+  }
+
+  try {
+    const html = readFileSync(appPath, 'utf-8');
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'text/html;profile=mcp-app',
+          text: html,
+          // CSP configuration to allow loading images from Mediagraph CDN
+          _meta: {
+            ui: {
+              csp: {
+                // Allow images from CloudFront CDN
+                resourceDomains: ['https://*.cloudfront.net'],
+                // Allow API calls to Mediagraph (for future use)
+                connectDomains: ['https://api.mediagraph.io'],
+              },
+            },
+          },
+        },
+      ],
+    };
+  } catch (error) {
+    console.error('[MCP] Failed to read app resource:', error);
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'text/plain',
+          text: 'Failed to load MCP App UI.',
+        },
+      ],
+    };
+  }
+}
 
 // CLI commands
 async function runAuthorize(): Promise<void> {
@@ -333,21 +458,29 @@ async function runAuthorize(): Promise<void> {
     // Get user info
     currentTokens = tokens;
     const whoami = await client.whoami();
+    console.log('Whoami response:', JSON.stringify(whoami, null, 2));
 
-    // Store tokens with user info
+    // Store tokens with user info (handle missing organization gracefully)
+    // Note: organization.title is the display name, organization.name may be undefined
+    const org = whoami.organization as { id?: number; name?: string; title?: string; slug?: string } | undefined;
     const storedData: StoredTokens = {
       tokens,
-      organizationId: whoami.organization.id,
-      organizationName: whoami.organization.name,
-      userId: whoami.user.id,
-      userEmail: whoami.user.email,
+      organizationId: org?.id,
+      organizationName: org?.title || org?.name,
+      organizationSlug: org?.slug,
+      userId: whoami.user?.id,
+      userEmail: whoami.user?.email,
     };
     tokenStore.save(storedData);
 
     console.log('');
     console.log('Successfully authorized!');
-    console.log(`Organization: ${whoami.organization.name}`);
-    console.log(`User: ${whoami.user.full_name} (${whoami.user.email})`);
+    if (org) {
+      console.log(`Organization: ${org.title || org.name} (${org.slug})`);
+    }
+    if (whoami.user) {
+      console.log(`User: ${whoami.user.full_name || whoami.user.email} (${whoami.user.email})`);
+    }
     console.log('');
     console.log('You can now use the Mediagraph MCP server.');
   } catch (error) {

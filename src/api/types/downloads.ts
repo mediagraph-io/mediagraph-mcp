@@ -10,14 +10,14 @@ export interface DownloadResponse {
 }
 
 export interface Download {
-  id: number;
+  id?: number;
   token: string;
   status?: string;
   filename?: string;
   file_size?: number;
   download_type?: string;
   asset_ids?: number[];
-  created_at: string;
+  created_at?: string;
   expires_at?: string;
   url?: string;
 }

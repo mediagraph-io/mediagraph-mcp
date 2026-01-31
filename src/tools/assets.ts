@@ -127,6 +127,29 @@ COMMON SEARCH FIELDS:
       },
     },
     {
+      name: 'bulk_download_assets',
+      description: 'Get a download URL for multiple assets (returns a ZIP file)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_ids: {
+            type: 'array',
+            items: { type: 'number' },
+            description: 'Array of asset IDs to download',
+          },
+          size: {
+            type: 'string',
+            enum: ['small', 'permalink', 'full', 'original'],
+            description: 'Maximum size for all assets in the download (default: original)',
+          },
+          watermarked: { type: 'boolean', description: 'Request watermarked versions' },
+          via: { type: 'string', description: 'Description of the app or integration making the call' },
+          skip_meta: { type: 'boolean', description: 'Do not write metadata to files' },
+        },
+        required: ['asset_ids'],
+      },
+    },
+    {
       name: 'get_asset_auto_tags',
       description: 'Get AI-generated auto tags for an asset',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
@@ -204,6 +227,15 @@ COMMON SEARCH FIELDS:
         size: args.size as string | undefined,
         watermarked: args.watermarked as boolean | undefined,
         version_number: args.version_number as number | undefined,
+      }));
+    },
+    async bulk_download_assets(args, { client }) {
+      return successResult(await client.getBulkDownload({
+        asset_ids: args.asset_ids as number[],
+        size: args.size as string | undefined,
+        watermarked: args.watermarked as boolean | undefined,
+        via: args.via as string | undefined,
+        skip_meta: args.skip_meta as boolean | undefined,
       }));
     },
     async get_asset_auto_tags(args, { client }) {

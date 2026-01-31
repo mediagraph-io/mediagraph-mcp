@@ -24,7 +24,8 @@ export interface User {
 
 export interface Organization {
   id: number;
-  name: string;
+  name?: string;
+  title?: string;
   slug: string;
   logo_url?: string;
   subdomain?: string;

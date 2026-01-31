@@ -339,13 +339,50 @@ export class MediagraphClient {
     via?: string;
     skip_meta?: boolean;
   }): Promise<DownloadResponse> {
-    const params: Record<string, unknown> = {};
-    if (options?.size) params.size = options.size;
-    if (options?.watermarked) params.watermarked = true;
-    if (options?.version_number) params.version_number = options.version_number;
-    if (options?.via) params.via = options.via;
-    if (options?.skip_meta) params.skip_meta = true;
-    return this.request<DownloadResponse>('GET', `/api/assets/${id}/download`, { params });
+    // Use the Prepare Download flow to get a secure token
+    // POST /api/downloads → { token, filename }
+    // Then the client can open GET /api/downloads/{token} without exposing access_token
+    const prepareResponse = await this.createDownload({
+      asset_ids: [typeof id === 'string' ? parseInt(id, 10) : id],
+      size: options?.size || 'original',
+      watermarked: options?.watermarked,
+      via: options?.via,
+      skip_meta: options?.skip_meta,
+    });
+
+    // Build the download URL using the token
+    const downloadUrl = `${this.apiUrl}/api/downloads/${prepareResponse.token}`;
+
+    return {
+      url: downloadUrl,
+      filename: prepareResponse.filename || `asset-${id}`,
+    };
+  }
+
+  async getBulkDownload(options: {
+    asset_ids: number[];
+    size?: string;
+    watermarked?: boolean;
+    via?: string;
+    skip_meta?: boolean;
+  }): Promise<DownloadResponse> {
+    // Use the Prepare Download flow to get a secure token
+    // For multiple assets, the download will be a ZIP file
+    const prepareResponse = await this.createDownload({
+      asset_ids: options.asset_ids,
+      size: options.size || 'original',
+      watermarked: options.watermarked,
+      via: options.via,
+      skip_meta: options.skip_meta,
+    });
+
+    // Build the download URL using the token
+    const downloadUrl = `${this.apiUrl}/api/downloads/${prepareResponse.token}`;
+
+    return {
+      url: downloadUrl,
+      filename: prepareResponse.filename || `mediagraph-download-${options.asset_ids.length}-assets.zip`,
+    };
   }
 
   async addAssetVersion(id: number | string, data: { filename: string; content_type: string; file_size: number }): Promise<{ signed_upload_url: string; asset_data_version: AssetDataVersion }> {
@@ -1150,8 +1187,29 @@ export class MediagraphClient {
     return this.request<Download>('GET', `/api/downloads/${token}`);
   }
 
-  async createDownload(data: { asset_ids: number[]; size?: string }): Promise<Download> {
-    return this.request<Download>('POST', '/api/downloads', { body: { download: data } });
+  async createDownload(data: {
+    asset_ids: number[];
+    size: string;
+    watermarked?: boolean;
+    via?: string;
+    skip_meta?: boolean;
+  }): Promise<Download> {
+    // Build download object with required fields
+    const download: Record<string, unknown> = {
+      asset_ids: data.asset_ids,
+      size: data.size,
+    };
+    if (data.watermarked === true) {
+      download.watermarked = true;
+    }
+    if (data.via) {
+      download.via = data.via;
+    }
+    if (data.skip_meta === true) {
+      download.skip_meta = true;
+    }
+
+    return this.request<Download>('POST', '/api/downloads', { body: { download } });
   }
 
   // ============================================================================
