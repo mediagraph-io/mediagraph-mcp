@@ -122,13 +122,10 @@ export default function App() {
   }, []);
 
   // Handle streaming tool input
-  const handleToolInput = useCallback((input: ToolInput) => {
-    console.log('[Mediagraph App] Tool input received:', input.toolName);
+  const handleToolInput = useCallback((_input: ToolInput) => {
     // Tool input comes before result, can be used for loading states
-    // Reset loading state when new tool input starts
-    if (input.toolName === 'search_assets_visual') {
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-    }
+    // Since this UI only handles search_assets_visual, we can set loading state
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
   }, []);
 
   // Set up MCP App connection

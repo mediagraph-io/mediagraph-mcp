@@ -15,8 +15,8 @@ export const downloadTools: ToolModule = {
           asset_ids: { type: 'array', items: { type: 'number' } },
           size: {
             type: 'string',
-            enum: ['small', 'small-watermark', 'permalink', 'permalink-watermark', 'full', 'full-watermark', 'original'],
-            description: 'Maximum size requested for assets in the download',
+            enum: ['small', 'medium', 'full', 'original'],
+            description: 'Maximum size requested for assets in the download (default: original)',
           },
         },
         required: ['asset_ids'],
@@ -31,7 +31,8 @@ export const downloadTools: ToolModule = {
 
   handlers: {
     async create_download(args, { client }) {
-      return successResult(await client.createDownload(args as { asset_ids: number[]; size?: string }));
+      const { asset_ids, size = 'original' } = args as { asset_ids: number[]; size?: string };
+      return successResult(await client.createDownload({ asset_ids, size }));
     },
     async get_download(args, { client }) {
       return successResult(await client.getDownload(args.token as string));
