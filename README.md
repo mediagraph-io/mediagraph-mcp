@@ -23,9 +23,19 @@ Or run directly with npx:
 npx @mediagraph/mcp
 ```
 
-## Quick Start
+## Quick Start with Claude Desktop
 
-### 1. Authorize
+The easiest way to get started is with [Claude Desktop](https://claude.ai/download).
+
+### Option A: One-Click Install (Recommended)
+
+1. Download the latest [`mediagraph-mcp.mcpb`](https://github.com/mediagraph-io/mediagraph-mcp/releases/latest/download/mediagraph-mcp.mcpb) bundle from [GitHub Releases](https://github.com/mediagraph-io/mediagraph-mcp/releases)
+2. Open the file — it will automatically configure Claude Desktop
+3. Authorize with your Mediagraph account when prompted
+
+### Option B: Manual Configuration
+
+#### 1. Authorize
 
 ```bash
 npx @mediagraph/mcp authorize
@@ -33,7 +43,7 @@ npx @mediagraph/mcp authorize
 
 This will open a browser window for you to log in and authorize the MCP server with your Mediagraph account.
 
-### 2. Configure Claude Desktop
+#### 2. Configure Claude Desktop
 
 Add the following to your Claude Desktop configuration file:
 
@@ -51,9 +61,11 @@ Add the following to your Claude Desktop configuration file:
 }
 ```
 
-### 3. Start Using
+#### 3. Restart Claude Desktop
 
-Restart Claude Desktop and you can now ask Claude to:
+### Start Using
+
+Once configured, you can ask Claude to:
 
 - "Search for images tagged 'sunset'"
 - "Show me the details of asset ABC123"
@@ -61,12 +73,28 @@ Restart Claude Desktop and you can now ask Claude to:
 - "Create a new collection called 'Project Photos'"
 - "Find all videos uploaded this week"
 
+## Visual Asset Browser
+
+In Claude Desktop, you can ask Claude to visually search your assets using the `search_assets_visual` tool. This opens an interactive gallery directly in the chat with:
+
+- **Thumbnail grid** — browse search results visually with hover previews
+- **Asset detail panel** — click any asset to view a full preview with file info, EXIF/IPTC metadata, and tags
+- **Inline editing** — edit title, description, alt text, caption, credit, and copyright without leaving Claude
+- **Ratings** — rate assets with a star rating
+- **Tagging** — add and remove tags from assets
+- **Downloads** — download assets in multiple sizes (small, medium, full, original) with optional watermarking
+- **Bulk downloads** — select multiple assets and download them at once
+- **Pagination** — navigate through large result sets
+
+Try asking Claude: *"Visually show me all images tagged 'landscape'"*
+
 ## Available Tools
 
 | Tool | Description |
 |------|-------------|
 | `whoami` | Get current user and organization info |
 | `search_assets` | Search assets with filters (tags, dates, ratings, etc.) |
+| `search_assets_visual` | Search assets and display results in an interactive visual gallery |
 | `get_asset` | Get detailed asset information |
 | `update_asset` | Update asset metadata (title, description, etc.) |
 | `add_tags` | Add tags to an asset |
