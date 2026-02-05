@@ -9,7 +9,7 @@ export const webhookTools: ToolModule = {
     {
       name: 'list_webhooks',
       description: 'List webhooks',
-      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+      inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by webhook name, URL, or asset group name' } }, required: [] },
     },
     {
       name: 'get_webhook',

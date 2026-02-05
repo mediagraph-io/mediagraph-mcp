@@ -71,7 +71,7 @@ export const jobTools: ToolModule = {
     {
       name: 'list_meta_imports',
       description: 'List metadata import jobs',
-      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+      inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by note or filename' } }, required: [] },
     },
     {
       name: 'get_meta_import',

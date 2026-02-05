@@ -10,7 +10,7 @@ export const sharingTools: ToolModule = {
     {
       name: 'list_share_links',
       description: 'List share links',
-      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+      inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by asset group name or user email' } }, required: [] },
     },
     {
       name: 'get_share_link',
@@ -56,6 +56,7 @@ export const sharingTools: ToolModule = {
         type: 'object',
         properties: {
           ...paginationParams,
+          q: { type: 'string', description: 'Search by name, email, or user' },
           type: { type: 'string', enum: ['grant', 'request'] },
           aasm_state: { type: 'string', enum: ['pending', 'submitted', 'finalized'] },
         },

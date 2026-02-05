@@ -12,7 +12,7 @@ export const groupTools: ToolModule = {
       description: 'List collections in the organization',
       inputSchema: {
         type: 'object',
-        properties: { ...paginationParams, parent_id: { type: 'number' } },
+        properties: { ...paginationParams, q: { type: 'string', description: 'Search by name' }, parent_id: { type: 'number' } },
         required: [],
       },
     },

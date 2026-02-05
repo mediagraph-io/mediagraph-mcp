@@ -9,7 +9,7 @@ export const metaTools: ToolModule = {
     {
       name: 'list_custom_meta_fields',
       description: 'List custom metadata fields',
-      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+      inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by name or description' } }, required: [] },
     },
     {
       name: 'get_custom_meta_field',

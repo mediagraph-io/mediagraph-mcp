@@ -10,7 +10,7 @@ export const adminTools: ToolModule = {
     {
       name: 'list_user_groups',
       description: 'List user groups',
-      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+      inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by name or invite domain' } }, required: [] },
     },
     {
       name: 'create_user_group',
@@ -26,7 +26,7 @@ export const adminTools: ToolModule = {
     {
       name: 'list_invites',
       description: 'List pending invites',
-      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+      inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by email or role level' } }, required: [] },
     },
     {
       name: 'create_invite',
@@ -207,7 +207,7 @@ export const adminTools: ToolModule = {
     {
       name: 'list_contributions',
       description: 'List contribution portals (upload links). Use contribution_id with upload_file/upload_files to upload to a specific storage folder or lightbox.',
-      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+      inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by contribution name' } }, required: [] },
     },
     {
       name: 'get_contribution',
