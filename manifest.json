@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mediagraph",
   "display_name": "Mediagraph",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Digital asset management for AI assistants - search, organize, and manage media assets",
   "long_description": "Mediagraph MCP provides AI assistants with access to your Mediagraph digital asset management platform. Search and browse media assets, manage collections and lightboxes, organize with tags and taxonomies, handle rights management, and more.",
   "author": {
