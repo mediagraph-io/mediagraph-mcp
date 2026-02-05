@@ -4,9 +4,16 @@
 
 import type { MediagraphClient } from '../api/client.js';
 
+export interface ReauthorizeResult {
+  success: boolean;
+  organizationName?: string;
+  userEmail?: string;
+}
+
 export interface ToolContext {
   client: MediagraphClient;
   organizationSlug?: string;
+  reauthorize?: () => Promise<ReauthorizeResult>;
 }
 
 export interface ToolResultContent {

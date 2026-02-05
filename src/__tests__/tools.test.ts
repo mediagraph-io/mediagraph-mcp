@@ -342,6 +342,40 @@ describe('Tool Handlers', () => {
     });
   });
 
+  describe('reauthorize', () => {
+    it('should call reauthorize callback and return success', async () => {
+      const reauthorize = vi.fn().mockResolvedValue({
+        success: true,
+        organizationName: 'New Org',
+        userEmail: 'new@example.com',
+      });
+
+      const result = await handleTool('reauthorize', {}, { client: mockClient, reauthorize });
+
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain('Successfully re-authorized');
+      expect(result.content[0].text).toContain('New Org');
+      expect(result.content[0].text).toContain('new@example.com');
+      expect(reauthorize).toHaveBeenCalledOnce();
+    });
+
+    it('should return error when reauthorize fails', async () => {
+      const reauthorize = vi.fn().mockResolvedValue({ success: false });
+
+      const result = await handleTool('reauthorize', {}, { client: mockClient, reauthorize });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Re-authorization failed');
+    });
+
+    it('should return error when reauthorize callback is not available', async () => {
+      const result = await handleTool('reauthorize', {}, { client: mockClient });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('not available');
+    });
+  });
+
   describe('error handling', () => {
     it('should return error for unknown tool', async () => {
       const result = await handleTool('unknown_tool', {}, { client: mockClient });

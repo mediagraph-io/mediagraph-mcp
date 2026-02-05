@@ -2,7 +2,7 @@
  * User and organization tools
  */
 
-import { idParam, paginationParams, successResult, type ToolModule } from './shared.js';
+import { idParam, paginationParams, successResult, errorResult, type ToolModule } from './shared.js';
 
 export const userTools: ToolModule = {
   definitions: [
@@ -42,6 +42,11 @@ export const userTools: ToolModule = {
         required: ['id'],
       },
     },
+    {
+      name: 'reauthorize',
+      description: 'Re-run the OAuth authorization flow. Use this to switch to a different Mediagraph organization or re-authenticate.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
   ],
 
   handlers: {
@@ -60,6 +65,16 @@ export const userTools: ToolModule = {
     async update_membership(args, { client }) {
       const { id, ...data } = args;
       return successResult(await client.updateMembership(id as number | string, data));
+    },
+    async reauthorize(_args, { reauthorize }) {
+      if (!reauthorize) {
+        return errorResult('Reauthorization is not available in this context.');
+      }
+      const result = await reauthorize();
+      if (!result.success) {
+        return errorResult('Re-authorization failed. Please complete the login in your browser and try again.');
+      }
+      return successResult(`Successfully re-authorized!\nOrganization: ${result.organizationName || 'Unknown'}\nUser: ${result.userEmail || 'Unknown'}`);
     },
   },
 };

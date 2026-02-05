@@ -191,7 +191,22 @@ const client = new MediagraphClient({
 
 // Create contexts for tools and resources
 // Note: organizationSlug is populated dynamically before each tool call
-const toolContext: ToolContext = { client };
+const toolContext: ToolContext = {
+  client,
+  reauthorize: async () => {
+    console.error('[MCP] Reauthorize requested, clearing tokens and starting new OAuth flow...');
+    currentTokens = null;
+    tokenStore.clear();
+    const success = await runAutoAuth();
+    if (!success) return { success: false };
+    const stored = tokenStore.load();
+    return {
+      success: true,
+      organizationName: stored?.organizationName,
+      userEmail: stored?.userEmail,
+    };
+  },
+};
 const resourceContext: ResourceContext = { client };
 
 /**
@@ -226,6 +241,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+
+  // Reauthorize handles its own auth flow, skip the normal check
+  if (name === 'reauthorize') {
+    console.error(`[MCP] Tool call: ${name}`);
+    const result = await handleTool(name, (args || {}) as Record<string, unknown>, toolContext);
+    return { content: result.content, isError: result.isError };
+  }
 
   // Check authentication - auto-trigger OAuth if needed
   let token = await getAccessToken();
