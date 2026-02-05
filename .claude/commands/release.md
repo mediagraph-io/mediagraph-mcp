@@ -1,5 +1,9 @@
 ---
 allowed-tools:
+  - Bash(git status:*)
+  - Bash(git add:*)
+  - Bash(git commit:*)
+  - Bash(git push:*)
   - Bash(./scripts/release.sh:*)
   - Bash(gh run watch --repo:*)
 ---
@@ -25,17 +29,28 @@ Examples:
 
 ## Steps
 
-1. Run the release script with the provided arguments:
+1. Check for uncommitted changes and commit them if any exist:
+   ```bash
+   git status --porcelain
+   ```
+   If there are changes, stage, commit, and push them before proceeding:
+   ```bash
+   git add -A
+   git commit -m "<descriptive message of the changes>"
+   git push
+   ```
+
+2. Run the release script with the provided arguments:
    ```bash
    ./scripts/release.sh [version] <otp>
    ```
 
-2. Wait for GitHub Actions to build the .mcpb and create the release:
+3. Wait for GitHub Actions to build the .mcpb and create the release:
    ```bash
    gh run watch --repo mediagraph-io/mediagraph-mcp
    ```
 
-3. Report the release URLs:
+4. Report the release URLs:
    - npm: https://www.npmjs.com/package/@mediagraph/mcp
    - GitHub Release: https://github.com/mediagraph-io/mediagraph-mcp/releases
    - URL of the MCPB download: https://github.com/mediagraph-io/mediagraph-mcp/releases/download/v<version>/mediagraph-mcp.mcpb
