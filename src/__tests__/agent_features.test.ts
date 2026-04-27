@@ -66,6 +66,17 @@ describe('cli/errors', () => {
   });
 });
 
+describe('package version', () => {
+  it('package.json version field is a real semver', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    // Test runs from repo root, so the package.json is right there.
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf-8')) as { name: string; version: string };
+    expect(pkg.name).toBe('@mediagraph/cli');
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
 describe('cli/global_flags', () => {
   it('extracts known boolean flags', () => {
     const { flags, rest } = stripGlobalFlags(['--all', '--dry-run', '--q', 'cats']);

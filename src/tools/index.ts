@@ -25,6 +25,7 @@ import { appTools } from './app.js';
 import { tagImportTools } from './tag_imports.js';
 import { renamePresetTools } from './rename_presets.js';
 import { metaDownloadTools } from './meta_downloads.js';
+import { urlTools } from './urls.js';
 
 // Re-export types
 export type { ToolContext, ToolResult, ToolDefinition, ToolModule };
@@ -50,6 +51,7 @@ const allToolModules: ToolModule[] = [
   tagImportTools,
   renamePresetTools,
   metaDownloadTools,
+  urlTools,
 ];
 
 // Export combined definitions
@@ -103,4 +105,5 @@ export {
   tagImportTools,
   renamePresetTools,
   metaDownloadTools,
+  urlTools,
 };

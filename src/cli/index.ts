@@ -23,7 +23,10 @@
  *   stderr — Structured error envelope when failing. See errors.ts.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { fileURLToPath } from 'node:url';
 
 import { DryRunIntercept, type MediagraphClient } from '../api/client.js';
 import { Runtime, getAuthStatus, runLogout } from '../core/runtime.js';
@@ -42,6 +45,7 @@ the entire API as ~157 tools, all returning JSON on stdout. New here?
 Run \`mediagraph skill\` for the agent-targeted onboarding guide.
 
 Usage:
+  mediagraph --version                    Print the package version
   mediagraph skill                        Print the agent skill guide (start here)
   mediagraph serve                        Start the MCP server (stdio)
   mediagraph auth login                   OAuth-authorize with Mediagraph
@@ -107,6 +111,11 @@ async function dispatch(argv: string[]): Promise<void> {
 
   if (!command || command === '--help' || command === '-h' || command === 'help') {
     process.stdout.write(`${HELP}\n`);
+    return;
+  }
+
+  if (command === '--version' || command === '-v' || command === 'version') {
+    process.stdout.write(`${readPackageVersion()}\n`);
     return;
   }
 
@@ -335,6 +344,28 @@ async function runAuth(runtime: Runtime, command: string, rest: string[]): Promi
     default:
       throw new CliError('UNKNOWN_COMMAND', `Unknown auth subcommand: ${sub}`, 'Use login, logout, or status.');
   }
+}
+
+/**
+ * Read the package version from disk. We resolve relative to the running
+ * dist/index.js so the same code works whether installed via global npm,
+ * an asdf shim, or a local dev build.
+ */
+function readPackageVersion(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, '..', 'package.json'),       // production: dist/index.js → ../package.json
+    join(here, '..', '..', 'package.json'), // chunked build: dist/chunk-*.js → ../../
+  ];
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    try {
+      const pkg = JSON.parse(readFileSync(path, 'utf-8')) as { name?: string; version?: string };
+      // Guard against finding some unrelated package.json on the way up.
+      if (pkg.name === '@mediagraph/cli' && pkg.version) return pkg.version;
+    } catch { /* keep looking */ }
+  }
+  return 'unknown';
 }
 
 void exitCodeFor;

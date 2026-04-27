@@ -254,6 +254,15 @@ paths stream from disk — no whole-file buffering.
 **Reauthorize** — `reauthorize` switches to a different organization
 (triggers a fresh OAuth flow).
 
+**URLs** — `generate_url` builds deep-link URLs for any entity (asset,
+collection, lightbox, storage_folder, tag, creator_tag, share_link, or
+explore root). Honors the org's custom domain (e.g. `dam.mer.fm`) when
+set, falls back to `https://mediagraph.io/{slug}/...`. Pass whichever
+identifier you have (guid for assets; slug for collections/folders;
+composite slug or id+name for lightboxes; id for tags). The tool will
+autofetch the entity if needed to derive a missing identifier; pass
+`--autofetch false` to skip and just build from what you provided.
+
 ## Common workflows
 
 **Find all untagged JPEGs:**
@@ -287,6 +296,19 @@ mediagraph get_share_status --id <share_id>
 **Switch organizations:**
 ```bash
 mediagraph reauthorize     # opens browser; pick a different org
+```
+
+**Generate a shareable link to an entity:**
+```bash
+# Have the asset id from a search? URL it:
+mediagraph generate_url --type asset --id 17302979
+# → https://dam.mer.fm/explore#/assets/<guid>
+
+# Collection by slug, no autofetch needed:
+mediagraph generate_url --type collection --slug doggies
+
+# Tag — pass id (and optionally name for prettier slug):
+mediagraph generate_url --type tag --id 609 --name Grandparent
 ```
 
 **One-shot upload** (CLI creates + finalizes the session):

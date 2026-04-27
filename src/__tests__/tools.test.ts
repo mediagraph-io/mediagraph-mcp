@@ -322,8 +322,8 @@ describe('Tool Handlers', () => {
     });
 
     it('should reuse an existing session via upload_guid and NOT finalize it', async () => {
-      mockClient.createUpload.mockClear();
-      mockClient.setUploadDone.mockClear();
+      (mockClient.createUpload as unknown as { mockClear(): void }).mockClear();
+      (mockClient.setUploadDone as unknown as { mockClear(): void }).mockClear();
       mockClient.getUpload = vi.fn().mockResolvedValue({
         id: 99, guid: 'existing-session', aws_key: 'AKIA', bucket: 'b',
       });
@@ -353,7 +353,7 @@ describe('Tool Handlers', () => {
 
   describe('create_upload_session / set_upload_done', () => {
     it('creates a session and returns guid + aws_key + bucket', async () => {
-      mockClient.createUpload.mockResolvedValue({
+      (mockClient.createUpload as unknown as { mockResolvedValue(v: unknown): void }).mockResolvedValue({
         id: 42, guid: 'sess-guid', aws_key: 'AKIA', bucket: 'b', created_at: 'x',
       });
       const result = await handleTool('create_upload_session', { name: 'batch' }, { client: mockClient });
@@ -375,7 +375,7 @@ describe('Tool Handlers', () => {
     });
 
     it('finalizes a session', async () => {
-      mockClient.setUploadDone.mockResolvedValue({ id: 42, guid: 'g', done_at: '2026-04-27T00:00:00Z' });
+      (mockClient.setUploadDone as unknown as { mockResolvedValue(v: unknown): void }).mockResolvedValue({ id: 42, guid: 'g', done_at: '2026-04-27T00:00:00Z' });
       const result = await handleTool('set_upload_done', { id: 42 }, { client: mockClient });
       expect(result.isError).toBeFalsy();
       const data = JSON.parse(result.content[0].text);
