@@ -311,6 +311,100 @@ describe('api/client 429 / 503 / PAT-disabled handling', () => {
   });
 });
 
+describe('api/client streaming upload', () => {
+  it('rejects files larger than the 5 GB single-PUT cap with a clear error', async () => {
+    const { mkdtempSync, openSync, closeSync, ftruncateSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'mg-upload-'));
+    const path = join(dir, 'huge.bin');
+    // Sparse file: appears 6 GB to stat() but takes ~0 disk space.
+    const fd = openSync(path, 'w');
+    ftruncateSync(fd, 6 * 1024 * 1024 * 1024);
+    closeSync(fd);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    await expect(
+      client.uploadFileToSignedUrl('https://x.test/signed', path, 'application/octet-stream'),
+    ).rejects.toThrow(/single-PUT S3 limit is 5 GB|Multipart upload requires server-side support/);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('streams a small file successfully and sets Content-Length', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'mg-upload-'));
+    const path = join(dir, 'small.bin');
+    writeFileSync(path, 'hello world');
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, statusText: 'OK', text: async () => '' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    await client.uploadFileToSignedUrl('https://x.test/signed', path, 'text/plain');
+
+    // Verify call shape — content-length, content-type, and the duplex flag
+    // that signals to undici we're streaming the body.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const init = fetchMock.mock.calls[0][1] as RequestInit & { duplex?: string; headers: Record<string, string> };
+    expect(init.method).toBe('PUT');
+    expect(init.headers['Content-Type']).toBe('text/plain');
+    expect(init.headers['Content-Length']).toBe('11');
+    expect(init.duplex).toBe('half');
+    // body is a ReadableStream when streaming — verify type rather than content,
+    // since our mock fetch never drains it.
+    expect(init.body).toBeInstanceOf(ReadableStream);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('retries idempotently on transient 5xx and succeeds', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'mg-upload-'));
+    const path = join(dir, 'small.bin');
+    writeFileSync(path, 'retry me');
+
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Service Unavailable', text: async () => 'down' })
+      .mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', text: async () => '' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    const promise = client.uploadFileToSignedUrl('https://x.test/signed', path, 'text/plain', { maxRetries: 3 });
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('does not retry permanent errors (4xx)', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'mg-upload-'));
+    const path = join(dir, 'small.bin');
+    writeFileSync(path, 'no retry');
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden', text: async () => 'access denied' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    await expect(
+      client.uploadFileToSignedUrl('https://x.test/signed', path, 'text/plain', { maxRetries: 5 }),
+    ).rejects.toThrow(/403/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe('cli/wait', () => {
   const definition: ToolDefinition = {
     name: 'create_thing',

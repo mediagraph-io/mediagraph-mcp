@@ -11,14 +11,20 @@ description: |
 
 # Mediagraph CLI
 
-A single binary that exposes the entire Mediagraph API as both an MCP server
-(stdio) and a CLI. Agents should prefer the CLI form — it returns plain JSON
-on stdout that you can parse and pipe.
+A single binary that exposes the entire [Mediagraph](https://www.mediagraph.io)
+API as both an MCP server (stdio) and a CLI. Agents should prefer the CLI
+form — it returns plain JSON on stdout that you can parse and pipe.
+
+**About Mediagraph:** a digital asset management (DAM) platform for
+organizing, sharing, and AI-tagging media at scale. Product info, pricing,
+and demos at [www.mediagraph.io](https://www.mediagraph.io); API reference
+at [docs.mediagraph.io](https://docs.mediagraph.io).
 
 ## Install / setup
 
 ```bash
 npm install -g @mediagraph/cli        # provides the `mediagraph` command
+mediagraph skill                       # → prints this guide; start here cold
 mediagraph auth login                  # OAuth, opens a browser, persists tokens
 mediagraph auth status                 # JSON: {authenticated, organization, user, token}
 ```
@@ -97,14 +103,16 @@ Top-level commands:
 
 | Command | Purpose |
 | --- | --- |
+| `skill` | Print this agent guide |
 | `serve` | Start MCP server (stdio). Used by Claude Desktop, etc. |
 | `auth login` / `auth logout` / `auth status` | OAuth lifecycle |
 | `list-tools` | Print every tool name, description, required + optional flags |
+| `search-tools <query>` | Ranked keyword search over the tool registry |
+| `sync ...` | Continuous folder sync (see below) |
 | `<tool_name> --help` | Show flags for a single tool |
 | `<tool_name> [flags]` | Invoke a tool, prints JSON |
 
-Anything that isn't `serve`, `auth`, `list-tools`, or `--help` is treated as
-a tool name.
+Anything that isn't a built-in command is treated as a tool name.
 
 ## Passing arguments
 
@@ -161,7 +169,7 @@ implicit `id:asc` tiebreaker.
 
 ## Capability map
 
-The CLI exposes ~157 tools across these groups. Use `list-tools` for the
+The CLI exposes ~160 tools across these groups. Use `list-tools` for the
 authoritative inventory; this map is the mental model.
 
 **Discover** — `whoami`, `get_organization`, `get_organization_branding`,
@@ -207,11 +215,18 @@ authoritative inventory; this map is the mental model.
 `create_custom_meta_field`, `update_custom_meta_field`,
 `delete_custom_meta_field`, `export_custom_meta_fields`.
 
-**Bulk jobs & uploads** — `list_bulk_jobs`, `get_bulk_job`,
-`create_bulk_job`, `cancel_bulk_job`, `get_bulk_job_queue_position`,
-`preview_rename_bulk_job`, `can_upload`, `add_assets_to_upload`,
+**Bulk jobs** — `list_bulk_jobs`, `get_bulk_job`, `create_bulk_job`,
+`cancel_bulk_job`, `get_bulk_job_queue_position`, `preview_rename_bulk_job`,
 `bulk_download_assets`, `list_meta_imports`, `get_meta_import`,
 `list_ingestions`.
+
+**Uploads** — `upload_file` (one file: file_path or base64 file_data),
+`upload_files` (many local files), `create_upload_session` +
+`set_upload_done` (long-lived sessions for batches), `add_assets_to_upload`
+(register pre-built asset records), `can_upload` (quota check). Files
+larger than 16 MiB automatically use direct-to-S3 multipart with parallel
+parts and per-part retry; smaller files use a single signed PUT. Both
+paths stream from disk — no whole-file buffering.
 
 **Rename presets** — `list_rename_presets`, `get_rename_preset`,
 `create_rename_preset`, `update_rename_preset`, `delete_rename_preset`,
@@ -274,6 +289,26 @@ mediagraph get_share_status --id <share_id>
 mediagraph reauthorize     # opens browser; pick a different org
 ```
 
+**One-shot upload** (CLI creates + finalizes the session):
+```bash
+mediagraph upload_file --file_path /path/to/photo.jpg
+# → asset id returned. Files >16 MiB auto-use S3 multipart.
+```
+
+**Batch upload across many calls** (agent owns the session lifecycle):
+```bash
+session=$(mediagraph create_upload_session --name "trip 2026" | jq -r .guid)
+id=$(mediagraph create_upload_session ... | jq .id)   # or capture id from same call
+
+for f in ~/Pictures/trip-2026/*.{jpg,raw}; do
+  mediagraph upload_file --file_path "$f" --upload_guid "$session"
+done
+
+mediagraph set_upload_done --id "$id"
+# Each upload_file is independently retryable; the session persists across
+# crashes and reboots until you finalize it.
+```
+
 ## Tips for agents
 
 - For multi-step workflows, capture stdout into a variable and `jq` the IDs
@@ -327,6 +362,6 @@ portable install or per-environment isolation.
 
 - Public/anonymous browsing of share links — use the share link URL directly
   in a browser.
-- Uploading large media files — the CLI exposes upload coordination tools
-  (`can_upload`, `add_assets_to_upload`) but the actual byte upload is a
-  separate S3 multipart flow not handled here.
+- Real-time visual editing in a chat thread — use the `search_assets_visual`
+  tool through the MCP server (Claude Desktop) instead; the plain CLI is
+  designed for scripting, not interactive UI.

@@ -16,6 +16,10 @@ export interface Upload {
   updated_at?: string;
   done_at?: string;
   user?: User;
+  /** AWS access key id, returned by POST /api/uploads. Used for direct-to-S3 multipart. */
+  aws_key?: string;
+  /** S3 bucket name for direct-to-S3 uploads. */
+  bucket?: string;
 }
 
 export interface Contribution {

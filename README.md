@@ -1,6 +1,8 @@
 # Mediagraph CLI
 
-A single binary that exposes the entire [Mediagraph](https://mediagraph.io) API to AI agents and shells. Ships as both a CLI (`mediagraph <tool>`) and an MCP server (`mediagraph serve`) — same code path, same auth, same output shape.
+A single binary that exposes the entire [Mediagraph](https://www.mediagraph.io) API to AI agents and shells. Ships as both a CLI (`mediagraph <tool>`) and an MCP server (`mediagraph serve`) — same code path, same auth, same output shape.
+
+> **About Mediagraph:** a digital asset management (DAM) platform for organizing, sharing, and AI-tagging media at scale. Learn more at [www.mediagraph.io](https://www.mediagraph.io).
 
 Built for agent workflows: every tool call returns JSON on stdout, errors on stderr with stable codes, and global flags handle the boring stuff (auth, pagination, retries, dry-runs, polling).
 
@@ -227,5 +229,6 @@ MIT — see [LICENSE](LICENSE).
 
 ## Support
 
+- [Mediagraph](https://www.mediagraph.io) — product info, pricing, demos
 - [API Documentation](https://docs.mediagraph.io)
 - [GitHub Issues](https://github.com/mediagraph/mediagraph-mcp/issues)

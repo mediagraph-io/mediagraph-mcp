@@ -115,7 +115,18 @@ export async function runUpload(
         created_via_id: config.name,
       });
 
-      await client.uploadToSignedUrl(prepared.signed_upload_url, readFileSync(absolute), guessContentType(filename));
+      // uploadAssetFile picks single-PUT or S3 multipart based on file size
+      // and whether the upload session returned bucket info.
+      let lastLoggedQuarter = 0;
+      await client.uploadAssetFile(prepared, upload, absolute, guessContentType(filename), {
+        onProgress: (bytes, total) => {
+          const quarter = Math.floor((bytes / total) * 4);
+          if (quarter > lastLoggedQuarter && quarter < 4) {
+            lastLoggedQuarter = quarter;
+            log(`upload progress: ${relativePath} ${quarter * 25}%`);
+          }
+        },
+      });
       await client.setAssetUploaded(prepared.guid, true);
 
       entry.assetId = prepared.id;

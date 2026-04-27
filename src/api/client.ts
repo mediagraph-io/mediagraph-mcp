@@ -90,6 +90,14 @@ export class MediagraphApiError extends Error {
 /** Maximum time we'll honor Retry-After before giving up on retries. */
 const MAX_RETRY_DELAY_MS = 60_000;
 
+/** Is an S3 PUT failure worth retrying? Network errors are; auth errors aren't. */
+function isRetryableUploadError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/Failed to upload to S3: (5\d\d|429)/.test(message)) return true;
+  if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|fetch failed|socket hang up/i.test(message)) return true;
+  return false;
+}
+
 /**
  * Parse a Retry-After header value. RFC 7231 allows either delta-seconds or
  * an HTTP-date. Returns the delay in milliseconds, or undefined if unparseable.
@@ -1010,6 +1018,10 @@ export class MediagraphClient {
     return this.request<Upload[]>('GET', '/api/uploads', { params });
   }
 
+  async getUpload(guidOrId: string | number): Promise<Upload> {
+    return this.request<Upload>('GET', `/api/uploads/${guidOrId}`);
+  }
+
   async createUpload(data?: { name?: string; note?: string; default_rights_package_id?: number }): Promise<Upload> {
     return this.request<Upload>('POST', '/api/uploads', data ? { body: { upload: data } } : undefined);
   }
@@ -1059,19 +1071,202 @@ export class MediagraphClient {
   }
 
   /**
-   * Upload file data directly to a signed S3 URL
+   * Upload an in-memory buffer directly to a signed S3 URL.
+   *
+   * Use {@link uploadFileToSignedUrl} for files on disk — it streams from
+   * disk so you don't need to load the whole file into RAM. For files over
+   * the multipart threshold, prefer {@link uploadAssetFile}.
    */
   async uploadToSignedUrl(signedUrl: string, fileData: Buffer | Uint8Array, contentType: string): Promise<void> {
-    const response = await fetch(signedUrl, {
+    await this.putToSignedUrl(signedUrl, fileData, contentType, fileData.byteLength);
+  }
+
+  /**
+   * SigV4 remote signer: posts a string-to-sign to /api/assets/sign and
+   * returns the hex signature. The Mediagraph server holds the AWS secret
+   * key; we never see it. Same endpoint Evaporate.js uses in the browser.
+   */
+  async signAwsRequest(toSign: string, datetime: string): Promise<string> {
+    // The sign endpoint accepts form params; use URL params on a POST.
+    const auth = await this.resolveAuth();
+    if (!auth) throw new Error('Not authenticated; cannot sign AWS request.');
+
+    const headers: Record<string, string> = { Accept: 'text/plain' };
+    if (auth.mode === 'bearer') headers.Authorization = `Bearer ${auth.token}`;
+    else {
+      headers.Authorization = `Basic ${Buffer.from(`:${auth.pat}`).toString('base64')}`;
+      headers.OrganizationId = String(auth.organizationId);
+    }
+    // The server route is `GET /api/assets/sign` (resources :assets do; get :sign).
+    // Evaporate.js sends GET; we mirror that.
+    const url = `${this.apiUrl}/api/assets/sign?datetime=${encodeURIComponent(datetime)}&to_sign=${encodeURIComponent(toSign)}`;
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Remote signer failed: ${response.status} ${response.statusText} ${detail.slice(0, 200)}`);
+    }
+    return (await response.text()).trim();
+  }
+
+  /**
+   * Upload a file for a prepared asset, choosing single PUT or multipart S3
+   * based on file size and whether bucket info is available.
+   *
+   * Mirrors the browser flow: Mediagraph hands us {bucket, aws_key, s3_upload_key},
+   * we talk directly to S3 with SigV4 signatures from the server.
+   *
+   * Falls back to single PUT (5 GB cap) when:
+   *   - file is below the multipart threshold (default 16 MiB), or
+   *   - the upload session didn't return aws_key + bucket (older API), or
+   *   - the asset response didn't include s3_upload_key.
+   */
+  async uploadAssetFile(
+    asset: { signed_upload_url: string; s3_upload_key?: string },
+    upload: { aws_key?: string; bucket?: string },
+    filePath: string,
+    contentType: string,
+    options: {
+      onProgress?: (sent: number, total: number) => void;
+      multipartThreshold?: number;
+      partSize?: number;
+      concurrency?: number;
+      region?: string;
+      s3Acceleration?: boolean;
+    } = {},
+  ): Promise<void> {
+    const { statSync } = await import('node:fs');
+    const totalBytes = statSync(filePath).size;
+    const threshold = options.multipartThreshold ?? 16 * 1024 * 1024;
+
+    const canMultipart = !!(upload.aws_key && upload.bucket && asset.s3_upload_key);
+    if (totalBytes < threshold || !canMultipart) {
+      await this.uploadFileToSignedUrl(asset.signed_upload_url, filePath, contentType, {
+        onProgress: options.onProgress,
+      });
+      return;
+    }
+
+    const { uploadFileMultipart } = await import('./multipart.js');
+    await uploadFileMultipart(
+      {
+        awsKey: upload.aws_key!,
+        bucket: upload.bucket!,
+        region: options.region ?? process.env.MEDIAGRAPH_UPLOAD_REGION ?? 'us-east-1',
+        s3Acceleration: options.s3Acceleration ?? true,
+        remoteSigner: (toSign, datetime) => this.signAwsRequest(toSign, datetime),
+      },
+      asset.s3_upload_key!,
+      filePath,
+      contentType,
+      {
+        partSize: options.partSize,
+        concurrency: options.concurrency,
+        onProgress: options.onProgress,
+      },
+    );
+  }
+
+  /**
+   * Stream a file from disk to a signed S3 PUT URL.
+   *
+   * - Reads in 8 MB chunks so memory use stays constant regardless of file size.
+   * - Up to 5 GB (S3 single-PUT cap). Larger files require server-side
+   *   multipart support, which Mediagraph does not currently expose.
+   * - Retries idempotently on transient network failures (S3 PUT is safe).
+   * - Optional progress callback fires after each chunk.
+   *
+   * NOTE on true multipart: S3 supports multipart upload (5 MB parts, up to
+   * 10 000 parts, 5 TB total) but each part needs its own SigV4-signed URL.
+   * The Mediagraph server currently returns a single presigned PUT, not a
+   * multipart upload id. To support files >5 GB or resumable transfers, the
+   * server would need to expose:
+   *   POST   /api/uploads/:guid/assets/:asset_guid/multipart_init
+   *          → { upload_id, parts_signed: [{ part_number, signed_url }, ...] }
+   *   POST   /api/uploads/:guid/assets/:asset_guid/multipart_sign
+   *          { upload_id, part_numbers: [n,n,n] }
+   *          → { parts_signed: [...] }
+   *   POST   /api/uploads/:guid/assets/:asset_guid/multipart_complete
+   *          { upload_id, parts: [{ part_number, etag }, ...] }
+   *   DELETE /api/uploads/:guid/assets/:asset_guid/multipart
+   *          { upload_id }   # abort
+   * Once those exist we can layer parallel-part upload on top of this client.
+   */
+  async uploadFileToSignedUrl(
+    signedUrl: string,
+    filePath: string,
+    contentType: string,
+    options: {
+      onProgress?: (bytesSent: number, totalBytes: number) => void;
+      maxRetries?: number;
+    } = {},
+  ): Promise<void> {
+    const { statSync, createReadStream } = await import('node:fs');
+    const stat = statSync(filePath);
+    const totalBytes = stat.size;
+
+    const FIVE_GB = 5 * 1024 * 1024 * 1024;
+    if (totalBytes > FIVE_GB) {
+      throw new Error(
+        `File is ${(totalBytes / 1024 / 1024 / 1024).toFixed(2)} GB; the single-PUT S3 limit is 5 GB. ` +
+        `Use uploadAssetFile() instead — it routes large files through S3 multipart automatically.`,
+      );
+    }
+
+    const maxRetries = options.maxRetries ?? 3;
+    let attempt = 0;
+    while (true) {
+      attempt += 1;
+      let bytesSent = 0;
+      const stream = createReadStream(filePath, { highWaterMark: 8 * 1024 * 1024 });
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          stream.on('data', chunk => {
+            const buf = chunk as Buffer;
+            bytesSent += buf.byteLength;
+            controller.enqueue(new Uint8Array(buf));
+            options.onProgress?.(bytesSent, totalBytes);
+          });
+          stream.on('end', () => controller.close());
+          stream.on('error', err => controller.error(err));
+        },
+        cancel() { stream.destroy(); },
+      });
+
+      try {
+        await this.putToSignedUrl(signedUrl, body, contentType, totalBytes);
+        return;
+      } catch (err) {
+        if (attempt >= maxRetries || !isRetryableUploadError(err)) throw err;
+        // Exponential backoff before retry. PUTs are idempotent so retry is safe.
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+      }
+    }
+  }
+
+  /** Shared PUT execution. Body may be a Buffer/Uint8Array or a ReadableStream. */
+  private async putToSignedUrl(
+    signedUrl: string,
+    body: Buffer | Uint8Array | ReadableStream<Uint8Array>,
+    contentType: string,
+    contentLength: number,
+  ): Promise<void> {
+    // `duplex: 'half'` is required by undici (Node's fetch) when sending a
+    // streaming body — it tells the runtime not to wait for a response before
+    // writing the request body.
+    const init: RequestInit & { duplex?: 'half' } = {
       method: 'PUT',
-      body: fileData,
+      body: body as unknown as RequestInit['body'],
       headers: {
         'Content-Type': contentType,
+        'Content-Length': String(contentLength),
       },
-    });
+    };
+    if (body instanceof ReadableStream) init.duplex = 'half';
 
+    const response = await fetch(signedUrl, init);
     if (!response.ok) {
-      throw new Error(`Failed to upload to S3: ${response.status} ${response.statusText}`);
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Failed to upload to S3: ${response.status} ${response.statusText}${detail ? ` — ${detail.slice(0, 200)}` : ''}`);
     }
   }
 

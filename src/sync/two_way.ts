@@ -195,7 +195,7 @@ async function uploadAsNewVersion(client: MediagraphClient, assetId: number, loc
     file_size: stat.size,
     created_via: 'mediagraph-sync',
   });
-  await client.uploadToSignedUrl(prepared.signed_upload_url, readFileSync(localFile), 'application/octet-stream');
+  await client.uploadAssetFile(prepared, upload, localFile, 'application/octet-stream');
   await client.setAssetUploaded(prepared.guid, true);
   await client.setUploadDone(upload.id);
   // Refetch to learn the new version number

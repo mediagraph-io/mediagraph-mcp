@@ -113,7 +113,7 @@ export class OAuthHandler {
           const errorDescription = url.searchParams.get('error_description');
 
           if (error) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.writeHead(400, { 'Content-Type': 'text/html', Connection: 'close' });
             res.end(`
               <html>
                 <body style="font-family: sans-serif; padding: 40px; text-align: center;">
@@ -130,7 +130,7 @@ export class OAuthHandler {
           }
 
           if (!code || !state) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.writeHead(400, { 'Content-Type': 'text/html', Connection: 'close' });
             res.end(`
               <html>
                 <body style="font-family: sans-serif; padding: 40px; text-align: center;">
@@ -147,7 +147,7 @@ export class OAuthHandler {
           }
 
           if (state !== this.state) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
+            res.writeHead(400, { 'Content-Type': 'text/html', Connection: 'close' });
             res.end(`
               <html>
                 <body style="font-family: sans-serif; padding: 40px; text-align: center;">
@@ -163,7 +163,7 @@ export class OAuthHandler {
             return;
           }
 
-          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.writeHead(200, { 'Content-Type': 'text/html', Connection: 'close' });
           res.end(`
             <html>
               <body style="font-family: sans-serif; padding: 40px; text-align: center;">
@@ -178,7 +178,7 @@ export class OAuthHandler {
           this.callbackPromise?.resolve({ code, state });
           this.callbackPromise = null;
         } else {
-          res.writeHead(404);
+          res.writeHead(404, { Connection: 'close' });
           res.end('Not found');
         }
       });
@@ -221,12 +221,23 @@ export class OAuthHandler {
   }
 
   /**
-   * Stop the callback server
+   * Stop the callback server.
+   *
+   * `Server.close()` is graceful — it stops accepting new connections but
+   * leaves keep-alive sockets open until they idle out (~5s default). The
+   * browser's HTTP/1.1 callback request keeps a socket alive, which would
+   * otherwise pin the Node event loop after auth completes and the CLI
+   * would appear to hang. `closeAllConnections()` (Node 18.2+) drops them
+   * forcibly so the process exits immediately.
    */
   stopCallbackServer(): void {
     if (this.callbackServer) {
-      this.callbackServer.close();
+      const server = this.callbackServer;
       this.callbackServer = null;
+      try {
+        (server as Server & { closeAllConnections?: () => void }).closeAllConnections?.();
+      } catch { /* ignore — older Node */ }
+      server.close();
     }
   }
 

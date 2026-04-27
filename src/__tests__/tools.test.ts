@@ -121,6 +121,8 @@ function createMockClient(overrides: Partial<MediagraphClient> = {}): Mediagraph
     createUpload: vi.fn().mockResolvedValue({ id: 1, guid: 'upload123', created_at: '2024-01-01' }),
     prepareAssetUpload: vi.fn().mockResolvedValue({ id: 1, guid: 'asset123', filename: 'test.jpg', signed_upload_url: 'https://s3.example.com/presigned' }),
     uploadToSignedUrl: vi.fn().mockResolvedValue(undefined),
+    uploadFileToSignedUrl: vi.fn().mockResolvedValue(undefined),
+    uploadAssetFile: vi.fn().mockResolvedValue(undefined),
     setAssetUploaded: vi.fn().mockResolvedValue({ id: 1, guid: 'asset123', filename: 'test.jpg', file_size: 1000, content_type: 'image/jpeg' }),
     setUploadDone: vi.fn().mockResolvedValue({ id: 1, guid: 'upload123', done_at: '2024-01-01' }),
     listContributions: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, per_page: 25 }),
@@ -312,9 +314,73 @@ describe('Tool Handlers', () => {
         file_size: 1000,
         created_via: 'mcp',
       });
-      expect(mockClient.uploadToSignedUrl).toHaveBeenCalled();
+      // Local files now route through uploadAssetFile (which decides single
+      // PUT vs multipart). Base64 (in-memory) inputs still use uploadToSignedUrl.
+      expect(mockClient.uploadAssetFile).toHaveBeenCalled();
       expect(mockClient.setAssetUploaded).toHaveBeenCalledWith('asset123');
       expect(mockClient.setUploadDone).toHaveBeenCalledWith(1);
+    });
+
+    it('should reuse an existing session via upload_guid and NOT finalize it', async () => {
+      mockClient.createUpload.mockClear();
+      mockClient.setUploadDone.mockClear();
+      mockClient.getUpload = vi.fn().mockResolvedValue({
+        id: 99, guid: 'existing-session', aws_key: 'AKIA', bucket: 'b',
+      });
+      const result = await handleTool('upload_file', {
+        file_path: '/path/to/test.jpg',
+        upload_guid: 'existing-session',
+      }, { client: mockClient });
+
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data.message).toContain('appended to session existing-session');
+      expect(mockClient.getUpload).toHaveBeenCalledWith('existing-session');
+      expect(mockClient.createUpload).not.toHaveBeenCalled();
+      expect(mockClient.setUploadDone).not.toHaveBeenCalled();
+    });
+
+    it('should reject upload_guid + contribution_id combo', async () => {
+      const result = await handleTool('upload_file', {
+        file_path: '/path/to/test.jpg',
+        upload_guid: 'sess',
+        contribution_id: 7,
+      }, { client: mockClient });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/mutually exclusive/);
+    });
+  });
+
+  describe('create_upload_session / set_upload_done', () => {
+    it('creates a session and returns guid + aws_key + bucket', async () => {
+      mockClient.createUpload.mockResolvedValue({
+        id: 42, guid: 'sess-guid', aws_key: 'AKIA', bucket: 'b', created_at: 'x',
+      });
+      const result = await handleTool('create_upload_session', { name: 'batch' }, { client: mockClient });
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data).toMatchObject({ id: 42, guid: 'sess-guid', aws_key: 'AKIA', bucket: 'b' });
+      expect(mockClient.createUpload).toHaveBeenCalledWith({
+        name: 'batch', note: undefined, default_rights_package_id: undefined,
+      });
+    });
+
+    it('routes through a contribution when contribution_id is given', async () => {
+      mockClient.createUploadFromContribution = vi.fn().mockResolvedValue({
+        id: 7, guid: 'cont-sess', aws_key: 'A', bucket: 'b', created_at: 'x',
+      });
+      const result = await handleTool('create_upload_session', { contribution_id: 9, name: 'b' }, { client: mockClient });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.createUploadFromContribution).toHaveBeenCalledWith(9, expect.objectContaining({ name: 'b' }));
+    });
+
+    it('finalizes a session', async () => {
+      mockClient.setUploadDone.mockResolvedValue({ id: 42, guid: 'g', done_at: '2026-04-27T00:00:00Z' });
+      const result = await handleTool('set_upload_done', { id: 42 }, { client: mockClient });
+      expect(result.isError).toBeFalsy();
+      const data = JSON.parse(result.content[0].text);
+      expect(data).toMatchObject({ finalized: true, id: 42, guid: 'g' });
+      expect(mockClient.setUploadDone).toHaveBeenCalledWith(42);
     });
   });
 

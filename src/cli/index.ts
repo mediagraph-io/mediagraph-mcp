@@ -37,7 +37,12 @@ import { waitForTerminal, WaitTimeout } from './wait.js';
 
 const HELP = `Mediagraph CLI / MCP server
 
+Mediagraph is a digital asset management (DAM) platform. This CLI exposes
+the entire API as ~157 tools, all returning JSON on stdout. New here?
+Run \`mediagraph skill\` for the agent-targeted onboarding guide.
+
 Usage:
+  mediagraph skill                        Print the agent skill guide (start here)
   mediagraph serve                        Start the MCP server (stdio)
   mediagraph auth login                   OAuth-authorize with Mediagraph
   mediagraph auth login --pat <T> --org <ID>
@@ -143,11 +148,17 @@ async function dispatch(argv: string[]): Promise<void> {
     return;
   }
 
+  if (command === 'skill') {
+    const { runSkillCli } = await import('./skill.js');
+    runSkillCli();
+    return;
+  }
+
   // Tool invocation
   const definition = toolDefinitions.find(t => t.name === command);
   if (!definition) {
     throw new CliError('UNKNOWN_COMMAND', `Unknown command: ${command}`,
-      'Run `mediagraph search-tools <query>` to find a tool, or `mediagraph --help`.');
+      'Run `mediagraph skill` for the agent guide, `mediagraph search-tools <query>` to find a tool, or `mediagraph --help`.');
   }
 
   let parsed;
