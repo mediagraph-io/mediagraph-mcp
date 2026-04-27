@@ -40,6 +40,20 @@ export interface ToolDefinition {
       resourceUri: string;
       visibility?: ('model' | 'app')[];
     };
+    /**
+     * If present, the CLI's `--wait` flag polls another tool until the job
+     * reaches a terminal state.
+     *   pollTool      — name of a tool that fetches the job by id
+     *   idField       — field on the *result* of THIS tool that contains the id (default: 'id')
+     *   statusField   — field on the *poll response* that contains the state
+     *   terminal      — set of states that mean "done" (success or failure)
+     */
+    wait?: {
+      pollTool: string;
+      idField?: string;
+      statusField: string;
+      terminal: string[];
+    };
     [key: string]: unknown;
   };
 }

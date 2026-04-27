@@ -1,0 +1,387 @@
+/**
+ * Tests for the agentic-usage features added to the CLI:
+ *   - Structured errors (CliError + classify)
+ *   - PAT auth path through Runtime + MediagraphClient
+ *   - Auto-pagination
+ *   - Dry-run interception
+ *   - Wait helper
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { CliError, classify } from '../cli/errors.js';
+import { isPaginated, paginate } from '../cli/pagination.js';
+import { stripGlobalFlags } from '../cli/global_flags.js';
+import { waitForTerminal, WaitTimeout } from '../cli/wait.js';
+import { MediagraphClient, MediagraphApiError, DryRunIntercept } from '../api/client.js';
+import type { ToolDefinition, ToolResult } from '../tools/shared.js';
+import { toolDefinitions } from '../tools/index.js';
+
+describe('cli/errors', () => {
+  it('classifies API 401 as AUTH_REQUIRED', () => {
+    const apiErr = new MediagraphApiError(401, { error: 'unauthorized', message: 'expired' });
+    const cli = classify(apiErr);
+    expect(cli.code).toBe('AUTH_REQUIRED');
+    expect(cli.hint).toMatch(/auth login/);
+  });
+
+  it('classifies API 404 as NOT_FOUND', () => {
+    expect(classify(new MediagraphApiError(404, { error: 'nf', message: 'gone' })).code).toBe('NOT_FOUND');
+  });
+
+  it('classifies API 429 as RATE_LIMITED with Retry-After hint', () => {
+    const apiErr = new MediagraphApiError(429, { error: 'too_many', message: 'slow' });
+    apiErr.retryAfterMs = 30_000;
+    const cli = classify(apiErr);
+    expect(cli.code).toBe('RATE_LIMITED');
+    expect(cli.hint).toMatch(/30s/);
+    expect(cli.context).toMatchObject({ statusCode: 429, retryAfterMs: 30_000 });
+  });
+
+  it('classifies API 503 as NETWORK with retry-after', () => {
+    const apiErr = new MediagraphApiError(503, { error: 'unavail', message: 'down' });
+    apiErr.retryAfterMs = 5000;
+    expect(classify(apiErr).code).toBe('NETWORK');
+  });
+
+  it('classifies disabled PAT as AUTH_REQUIRED with a specific hint', () => {
+    const apiErr = new MediagraphApiError(401, { error: 'pat_disabled', message: 'PAT disabled' });
+    apiErr.patDisabled = true;
+    const cli = classify(apiErr);
+    expect(cli.code).toBe('AUTH_REQUIRED');
+    expect(cli.hint).toMatch(/PAT is disabled/);
+  });
+
+  it('classifies network failures', () => {
+    expect(classify(new Error('fetch failed: ECONNREFUSED')).code).toBe('NETWORK');
+  });
+
+  it('treats CliError as-is', () => {
+    const e = new CliError('BAD_ARGS', 'no');
+    expect(classify(e)).toBe(e);
+  });
+
+  it('falls back to INTERNAL for unknown errors', () => {
+    expect(classify(new Error('boom')).code).toBe('INTERNAL');
+  });
+});
+
+describe('cli/global_flags', () => {
+  it('extracts known boolean flags', () => {
+    const { flags, rest } = stripGlobalFlags(['--all', '--dry-run', '--q', 'cats']);
+    expect(flags.all).toBe(true);
+    expect(flags.dryRun).toBe(true);
+    expect(rest).toEqual(['--q', 'cats']);
+  });
+
+  it('extracts numeric flags with values', () => {
+    const { flags } = stripGlobalFlags(['--limit', '50', '--wait-timeout', '120']);
+    expect(flags.limit).toBe(50);
+    expect(flags.waitTimeoutMs).toBe(120_000);
+  });
+
+  it('passes through unknown flags untouched', () => {
+    const { flags, rest } = stripGlobalFlags(['--per_page', '10', '--all']);
+    expect(flags.all).toBe(true);
+    expect(rest).toEqual(['--per_page', '10']);
+  });
+
+  it('supports --flag=value form', () => {
+    const { flags } = stripGlobalFlags(['--limit=25', '--all=true']);
+    expect(flags.limit).toBe(25);
+    expect(flags.all).toBe(true);
+  });
+});
+
+describe('cli/pagination', () => {
+  it('detects paginated tools', () => {
+    const list = toolDefinitions.find(t => t.name === 'list_collections');
+    expect(list && isPaginated(list)).toBe(true);
+    const get = toolDefinitions.find(t => t.name === 'get_asset');
+    expect(get && isPaginated(get)).toBe(false);
+  });
+
+  it('paginates an array-shaped response until exhausted', async () => {
+    const pages = [
+      Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })),
+      Array.from({ length: 100 }, (_, i) => ({ id: i + 101 })),
+      Array.from({ length: 25 }, (_, i) => ({ id: i + 201 })),
+    ];
+    const invoke = vi.fn().mockImplementation(async (args: { page: number }) => pages[args.page - 1]);
+    const result = await paginate({}, invoke);
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as unknown[]).length).toBe(225);
+    expect(invoke).toHaveBeenCalledTimes(3);
+  });
+
+  it('respects --limit', async () => {
+    const pages = [
+      Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })),
+      Array.from({ length: 100 }, (_, i) => ({ id: i + 101 })),
+    ];
+    const invoke = vi.fn().mockImplementation(async (args: { page: number }) => pages[args.page - 1]);
+    const result = await paginate({}, invoke, { limit: 150 });
+    expect((result as unknown[]).length).toBe(150);
+  });
+
+  it('paginates an envelope-shaped response (assets array)', async () => {
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({ assets: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })), total: 105, page: 1 })
+      .mockResolvedValueOnce({ assets: Array.from({ length: 5 }, (_, i) => ({ id: i + 101 })), total: 105, page: 2 });
+    const result = await paginate({}, invoke) as Record<string, unknown>;
+    expect(Array.isArray(result.assets)).toBe(true);
+    expect((result.assets as unknown[]).length).toBe(105);
+    expect(result.total).toBe(105);
+    expect(result._paginated).toBe(true);
+  });
+
+  it('returns non-list responses unchanged', async () => {
+    const result = await paginate({}, async () => ({ ok: true, status: 'ready' }));
+    expect(result).toEqual({ ok: true, status: 'ready' });
+  });
+});
+
+describe('api/client dry-run', () => {
+  it('throws DryRunIntercept with method/path/body when dryRun is true', async () => {
+    const client = new MediagraphClient({
+      getAccessToken: async () => 'tok',
+      dryRun: true,
+    });
+    await expect(client.getAsset(42)).rejects.toBeInstanceOf(DryRunIntercept);
+    try {
+      await client.deleteAsset(99);
+    } catch (e) {
+      const intercept = e as DryRunIntercept;
+      expect(intercept.call.method).toBe('DELETE');
+      expect(intercept.call.path).toBe('/api/assets/99');
+    }
+  });
+
+  it('PAT mode sends Basic auth + OrganizationId header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200, statusText: 'OK',
+      headers: { get: (n: string) => n.toLowerCase() === 'content-type' ? 'application/json' : null },
+      json: async () => ({ id: 1 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({
+      getAuth: async () => ({ mode: 'basic', pat: 'secret', organizationId: 42 }),
+    });
+    await client.getAsset(1);
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe(`Basic ${Buffer.from(':secret').toString('base64')}`);
+    expect(headers.OrganizationId).toBe('42');
+  });
+
+  it('Bearer mode sends Authorization: Bearer', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200, statusText: 'OK',
+      headers: { get: (n: string) => n.toLowerCase() === 'content-type' ? 'application/json' : null },
+      json: async () => ({ id: 1 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new MediagraphClient({ getAccessToken: async () => 'oauth-tok' });
+    await client.getAsset(1);
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer oauth-tok');
+    expect(headers.OrganizationId).toBeUndefined();
+  });
+});
+
+describe('api/client 429 / 503 / PAT-disabled handling', () => {
+  function rateLimited(retryAfter?: string) {
+    return {
+      ok: false, status: 429, statusText: 'Too Many Requests',
+      headers: { get: (n: string) => (n === 'Retry-After' ? retryAfter ?? null : null) },
+      json: async () => ({ error: 'rate_limited' }),
+    };
+  }
+  function ok(body: unknown) {
+    return {
+      ok: true, status: 200, statusText: 'OK',
+      headers: { get: (n: string) => n.toLowerCase() === 'content-type' ? 'application/json' : null },
+      json: async () => body,
+    };
+  }
+
+  it('retries 429 with delta-seconds Retry-After then succeeds', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(rateLimited('1'))
+      .mockResolvedValueOnce(ok({ id: 1 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    const promise = client.getAsset(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toMatchObject({ id: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('parses HTTP-date Retry-After', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const inFuture = new Date('2026-01-01T00:00:02Z').toUTCString();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(rateLimited(inFuture))
+      .mockResolvedValueOnce(ok({ id: 2 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    const promise = client.getAsset(2);
+    await vi.advanceTimersByTimeAsync(3000);
+    await expect(promise).resolves.toMatchObject({ id: 2 });
+    vi.useRealTimers();
+  });
+
+  it('throws MediagraphApiError(429) with retryAfterMs after exhausting retries', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(rateLimited('2'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    const promise = client.getAsset(3);
+    promise.catch(() => { /* swallow */ });
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    await expect(promise).rejects.toMatchObject({
+      statusCode: 429,
+      retryAfterMs: 2000,
+    });
+    expect(await promise.catch(e => e)).toBeInstanceOf(MediagraphApiError);
+    vi.useRealTimers();
+  });
+
+  it('throws immediately when Retry-After exceeds the cap (no point looping)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(rateLimited('3600'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    await expect(client.getAsset(4)).rejects.toMatchObject({
+      statusCode: 429,
+      retryAfterMs: 3_600_000,
+    });
+    // Single attempt; no retries when wait would be too long.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats 503 like 429 (honors Retry-After)', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: 503, statusText: 'Service Unavailable',
+        headers: { get: (n: string) => (n === 'Retry-After' ? '1' : null) },
+        json: async () => ({ error: 'unavailable' }),
+      })
+      .mockResolvedValueOnce(ok({ id: 5 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({ getAccessToken: async () => 'tok' });
+    const promise = client.getAsset(5);
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toMatchObject({ id: 5 });
+    vi.useRealTimers();
+  });
+
+  it('surfaces X-PAT-Disabled as AUTH error', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200, statusText: 'OK',
+      headers: {
+        get: (n: string) => {
+          if (n === 'X-PAT-Disabled') return '1';
+          if (n === 'X-PAT-Disabled-Note') return 'Revoked by admin';
+          if (n.toLowerCase() === 'content-type') return 'application/json';
+          return null;
+        },
+      },
+      json: async () => ({ id: 6 }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = new MediagraphClient({
+      getAuth: async () => ({ mode: 'basic', pat: 'tok', organizationId: 1 }),
+    });
+    const err = await client.getAsset(6).catch(e => e);
+    expect(err).toBeInstanceOf(MediagraphApiError);
+    expect(err.statusCode).toBe(401);
+    expect(err.patDisabled).toBe(true);
+    expect(err.message).toMatch(/Revoked by admin/);
+  });
+});
+
+describe('cli/wait', () => {
+  const definition: ToolDefinition = {
+    name: 'create_thing',
+    description: 'd',
+    inputSchema: { type: 'object', properties: {}, required: [] },
+    _meta: {
+      wait: { pollTool: 'get_thing', idField: 'id', statusField: 'state', terminal: ['done', 'failed'] },
+    },
+  };
+
+  function ok(body: unknown): ToolResult {
+    return { content: [{ type: 'text', text: JSON.stringify(body) }] };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  it('returns the terminal state once status reaches a terminal value', async () => {
+    const responses = [
+      ok({ id: 1, state: 'queued' }),
+      ok({ id: 1, state: 'running' }),
+      ok({ id: 1, state: 'done', result: 'yay' }),
+    ];
+    const invoke = vi.fn().mockImplementation(async () => responses.shift()!);
+
+    const promise = waitForTerminal(
+      definition,
+      { id: 1 },
+      invoke,
+      { client: {} as never },
+      { timeoutMs: 600_000, pollMs: 10 },
+    );
+    await vi.advanceTimersByTimeAsync(60);
+    const result = await promise;
+    expect(result).toMatchObject({ id: 1, state: 'done' });
+    expect(invoke).toHaveBeenCalledTimes(3);
+  });
+
+  it('throws WaitTimeout if it never reaches a terminal state', async () => {
+    const invoke = vi.fn().mockResolvedValue(ok({ id: 1, state: 'running' }));
+    const promise = waitForTerminal(
+      definition,
+      { id: 1 },
+      invoke,
+      { client: {} as never },
+      { timeoutMs: 50, pollMs: 10 },
+    );
+    promise.catch(() => {/* swallow */});
+    await vi.advanceTimersByTimeAsync(120);
+    await expect(promise).rejects.toBeInstanceOf(WaitTimeout);
+  });
+
+  it('handles list-shaped poll responses (e.g. list_meta_downloads)', async () => {
+    const meta: ToolDefinition = {
+      ...definition,
+      _meta: { wait: { pollTool: 'list_things', idField: 'guid', statusField: 'aasm_state', terminal: ['ready'] } },
+    };
+    const invoke = vi.fn()
+      .mockResolvedValueOnce(ok([{ guid: 'abc', aasm_state: 'pending' }, { guid: 'xyz', aasm_state: 'ready' }]))
+      .mockResolvedValueOnce(ok([{ guid: 'abc', aasm_state: 'ready' }]));
+
+    const promise = waitForTerminal(
+      meta,
+      { guid: 'abc' },
+      invoke,
+      { client: {} as never },
+      { timeoutMs: 600_000, pollMs: 10 },
+    );
+    await vi.advanceTimersByTimeAsync(60);
+    const result = await promise;
+    expect(result).toEqual([{ guid: 'abc', aasm_state: 'ready' }]);
+  });
+});

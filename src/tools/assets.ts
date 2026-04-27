@@ -20,6 +20,14 @@ ADVANCED SEARCH QUERY SYNTAX (for the 'q' parameter):
 - Existence: Use field:** to find assets with any value, NOT field:** for empty (e.g., "NOT tag_text:**" finds untagged assets)
 - Complex: Use parentheses for grouping (e.g., "(dog OR cat) AND ext:jpg")
 
+NOTE on multi-word queries: the API uses Elasticsearch cross_fields, so a
+multi-word query like "red barn" can match if "red" appears in one field and
+"barn" appears in another. Quote phrases ("red barn") to require both terms
+in the same field.
+
+Sort: pass either 'order' or its alias 'direction' (asc/desc). Results have
+an implicit id:asc tiebreaker (except when using a custom sort).
+
 COMMON SEARCH FIELDS:
 - tag_text: Keywords/tags
 - filename.keyword: Exact filename
@@ -160,6 +168,43 @@ COMMON SEARCH FIELDS:
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
     {
+      name: 'tag_video_face',
+      description: 'Manually tag a face track in a video; indexes the cropped frame into Rekognition.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          person_index: { type: 'number', description: 'Person index returned by face detection' },
+          name: { type: 'string', description: 'Optional name for the tagged face' },
+          tag_id: { type: 'number', description: 'Optional existing tag ID to associate' },
+        },
+        required: ['id', 'person_index'],
+      },
+    },
+    {
+      name: 'detect_video_faces',
+      description: 'Trigger face detection for an existing video asset (for videos uploaded before video face tagging shipped).',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'explain_asset_search',
+      description: 'Super-admin diagnostic: show which Elasticsearch fields/terms matched a query for a given asset.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          q: { type: 'string', description: 'Query to explain (or use text_q)' },
+          text_q: { type: 'string', description: 'Alternate text query to explain' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_published_image',
+      description: 'Delete a single PublishedImage row. Auto-cleans the parent PublishedAsset when the last image is removed.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
       name: 'get_asset_versions',
       description: 'Get version history for an asset',
       inputSchema: { type: 'object', properties: { asset_id: idParam }, required: ['asset_id'] },
@@ -243,6 +288,21 @@ COMMON SEARCH FIELDS:
     },
     async get_asset_face_taggings(args, { client }) {
       return successResult(await client.getAssetFaceTaggings(args.id as number | string));
+    },
+    async tag_video_face(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.tagVideoFace(id as number | string, rest as { person_index: number; name?: string; tag_id?: number }));
+    },
+    async detect_video_faces(args, { client }) {
+      return successResult(await client.detectVideoFaces(args.id as number | string));
+    },
+    async explain_asset_search(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.explainAssetSearch(id as number | string, rest as { q?: string; text_q?: string }));
+    },
+    async delete_published_image(args, { client }) {
+      await client.deletePublishedImage(args.id as number | string);
+      return successResult({ success: true });
     },
     async get_asset_versions(args, { client }) {
       return successResult(await client.getAssetDataVersions(args.asset_id as number | string));

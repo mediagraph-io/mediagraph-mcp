@@ -1,11 +1,11 @@
 {
-  "name": "@mediagraph/mcp",
+  "name": "@mediagraph/cli",
   "version": "1.0.16",
-  "description": "MCP server for Mediagraph - Media Asset Management Platform",
+  "description": "CLI and MCP server for Mediagraph - Digital Asset Management Platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "mediagraph-mcp": "./dist/index.js"
+    "mediagraph": "./dist/index.js"
   },
   "scripts": {
     "build": "NODE_ENV=production tsup src/index.ts --format esm --dts --clean && npm run build:app:prod",

@@ -73,6 +73,11 @@ export const sharingTools: ToolModule = {
       description: 'Submit an access request',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
+    {
+      name: 'get_share_status',
+      description: 'Lightweight status poll for a share (aasm_state, progress, code, url, direct_link)',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
   ],
 
   handlers: {
@@ -108,6 +113,9 @@ export const sharingTools: ToolModule = {
     },
     async submit_access_request(args, { client }) {
       return successResult(await client.submitAccessRequest(args.id as number | string));
+    },
+    async get_share_status(args, { client }) {
+      return successResult(await client.getShareStatus(args.id as number | string));
     },
   },
 };

@@ -2,7 +2,7 @@
  * MCP Tools for Mediagraph - Combined from all tool modules
  */
 
-import type { MediagraphClient } from '../api/client.js';
+import { DryRunIntercept, type MediagraphClient } from '../api/client.js';
 import type { ToolContext, ToolResult, ToolDefinition, ToolModule } from './shared.js';
 import { errorResult } from './shared.js';
 
@@ -22,6 +22,9 @@ import { uploadTools } from './uploads.js';
 import { webhookTools } from './webhooks.js';
 import { adminTools } from './admin.js';
 import { appTools } from './app.js';
+import { tagImportTools } from './tag_imports.js';
+import { renamePresetTools } from './rename_presets.js';
+import { metaDownloadTools } from './meta_downloads.js';
 
 // Re-export types
 export type { ToolContext, ToolResult, ToolDefinition, ToolModule };
@@ -44,6 +47,9 @@ const allToolModules: ToolModule[] = [
   webhookTools,
   adminTools,
   appTools,
+  tagImportTools,
+  renamePresetTools,
+  metaDownloadTools,
 ];
 
 // Export combined definitions
@@ -69,6 +75,9 @@ export async function handleTool(
   try {
     return await handler(args, context);
   } catch (error) {
+    // Dry-run signal must propagate up to the CLI dispatcher unchanged —
+    // wrapping it as a tool error would lose the request descriptor.
+    if (error instanceof DryRunIntercept) throw error;
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     return errorResult(message);
   }
@@ -91,4 +100,7 @@ export {
   webhookTools,
   adminTools,
   appTools,
+  tagImportTools,
+  renamePresetTools,
+  metaDownloadTools,
 };

@@ -53,6 +53,6 @@ git push origin "v$NEW_VERSION"
 
 echo ""
 echo "==> Release v$NEW_VERSION initiated!"
-echo "    npm: https://www.npmjs.com/package/@mediagraph/mcp"
+echo "    npm: https://www.npmjs.com/package/@mediagraph/cli"
 echo "    GitHub Actions will create the release with .mcpb"
 echo "    Watch: gh run watch --repo mediagraph-io/mediagraph-mcp"

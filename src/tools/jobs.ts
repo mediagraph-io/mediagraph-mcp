@@ -52,8 +52,41 @@ export const jobTools: ToolModule = {
           restore_all: { type: 'boolean', description: 'Restore all specified assets from trash' },
           generate_alt_text: { type: 'boolean', description: 'Generate alt text using AI' },
           alt_text_generation_prompt: { type: 'string', description: 'Custom prompt for alt text generation' },
+          // Rename operations
+          rename_preset_id: { type: 'number', description: 'Rename Preset ID to apply' },
+          rename_custom_text: { type: 'string', description: 'Custom text token value for rename' },
+          rename_custom_text_2: { type: 'string', description: 'Second custom text token value for rename' },
+          rename_start_number: { type: 'number', description: 'Per-asset starting number for sequence tokens' },
+          rename_global_start: { type: 'number', description: 'Global starting number across the batch' },
+          rename_duplicate_resolution: { type: 'string', enum: ['skip', 'append'], description: 'How to resolve duplicate filenames' },
+          // Super-admin only
+          rerun_auto_tag: { type: 'boolean', description: 'Re-run auto-tagging (super-admin only)' },
         },
         required: ['asset_ids'],
+      },
+      _meta: {
+        wait: {
+          pollTool: 'get_bulk_job',
+          idField: 'id',
+          statusField: 'aasm_state',
+          terminal: ['done', 'completed', 'failed', 'cancelled', 'errored'],
+        },
+      },
+    },
+    {
+      name: 'preview_rename_bulk_job',
+      description: 'Preview the filenames a rename bulk job will produce, before submitting it.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          rename_preset_id: { type: 'number' },
+          asset_ids: { type: 'array', items: { type: 'number' } },
+          custom_text: { type: 'string' },
+          custom_text_2: { type: 'string' },
+          start_number: { type: 'number' },
+          global_start: { type: 'number' },
+        },
+        required: ['rename_preset_id', 'asset_ids'],
       },
     },
     {
@@ -116,6 +149,23 @@ export const jobTools: ToolModule = {
         restore_all?: boolean;
         generate_alt_text?: boolean;
         alt_text_generation_prompt?: string;
+        rename_preset_id?: number;
+        rename_custom_text?: string;
+        rename_custom_text_2?: string;
+        rename_start_number?: number;
+        rename_global_start?: number;
+        rename_duplicate_resolution?: string;
+        rerun_auto_tag?: boolean;
+      }));
+    },
+    async preview_rename_bulk_job(args, { client }) {
+      return successResult(await client.previewRenameBulkJob(args as {
+        rename_preset_id: number;
+        asset_ids: number[];
+        custom_text?: string;
+        custom_text_2?: string;
+        start_number?: number;
+        global_start?: number;
       }));
     },
     async cancel_bulk_job(args, { client }) {

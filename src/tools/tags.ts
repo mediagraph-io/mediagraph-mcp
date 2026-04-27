@@ -12,8 +12,21 @@ export const tagTools: ToolModule = {
       description: 'List tags in the organization',
       inputSchema: {
         type: 'object',
-        properties: { ...paginationParams, q: { type: 'string', description: 'Search query' } },
+        properties: {
+          ...paginationParams,
+          q: { type: 'string', description: 'Search query' },
+          tag_import_id: { type: 'number', description: 'Filter to tags created by a given TagImport' },
+        },
         required: [],
+      },
+    },
+    {
+      name: 'check_tag_name',
+      description: 'Async uniqueness check for a tag name (e.g., for artwork inventory numbers). Returns { exists: boolean }.',
+      inputSchema: {
+        type: 'object',
+        properties: { name: { type: 'string', description: 'Tag name to check' } },
+        required: ['name'],
       },
     },
     {
@@ -160,6 +173,9 @@ export const tagTools: ToolModule = {
     // Tags
     async list_tags(args, { client }) {
       return successResult(await client.listTags(args));
+    },
+    async check_tag_name(args, { client }) {
+      return successResult(await client.checkTagName(args.name as string));
     },
     async get_tag(args, { client }) {
       return successResult(await client.getTag(args.id as number | string));

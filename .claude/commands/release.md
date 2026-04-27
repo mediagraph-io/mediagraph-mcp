@@ -51,6 +51,6 @@ Examples:
    ```
 
 4. Report the release URLs:
-   - npm: https://www.npmjs.com/package/@mediagraph/mcp
+   - npm: https://www.npmjs.com/package/@mediagraph/cli
    - GitHub Release: https://github.com/mediagraph-io/mediagraph-mcp/releases
    - URL of the MCPB download: https://github.com/mediagraph-io/mediagraph-mcp/releases/download/v<version>/mediagraph-mcp.mcpb

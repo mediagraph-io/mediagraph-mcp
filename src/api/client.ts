@@ -54,12 +54,30 @@ import type {
   PaginationParams,
 } from './types.js';
 
+export type AuthCredentials =
+  | { mode: 'bearer'; token: string }
+  | { mode: 'basic'; pat: string; organizationId: number };
+
 export interface MediagraphClientConfig {
   apiUrl?: string;
-  getAccessToken: () => Promise<string | null>;
+  /** Preferred: full auth resolver. Returns Bearer (OAuth) or Basic+OrgId (PAT). */
+  getAuth?: () => Promise<AuthCredentials | null>;
+  /** Legacy: bearer-token-only resolver. Used if `getAuth` is not provided. */
+  getAccessToken?: () => Promise<string | null>;
+  /** When true, request() throws DryRunIntercept describing the call instead of executing it. */
+  dryRun?: boolean;
 }
 
 export class MediagraphApiError extends Error {
+  /**
+   * Retry-After value in milliseconds when the server set the header (429/503).
+   * Useful for callers (CLI `--wait`, sync runner) that want to back off
+   * smarter than the next scheduled tick.
+   */
+  public retryAfterMs?: number;
+  /** True when the server set X-PAT-Disabled (PAT was disabled by an admin). */
+  public patDisabled?: boolean;
+
   constructor(
     public statusCode: number,
     public errorBody: ApiError,
@@ -69,15 +87,65 @@ export class MediagraphApiError extends Error {
   }
 }
 
+/** Maximum time we'll honor Retry-After before giving up on retries. */
+const MAX_RETRY_DELAY_MS = 60_000;
+
+/**
+ * Parse a Retry-After header value. RFC 7231 allows either delta-seconds or
+ * an HTTP-date. Returns the delay in milliseconds, or undefined if unparseable.
+ */
+function parseRetryAfter(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  // delta-seconds: a non-negative integer
+  if (/^\d+$/.test(trimmed)) {
+    return Math.max(0, parseInt(trimmed, 10) * 1000);
+  }
+  // HTTP-date
+  const ts = Date.parse(trimmed);
+  if (Number.isFinite(ts)) {
+    return Math.max(0, ts - Date.now());
+  }
+  return undefined;
+}
+
+export interface DryRunDescriptor {
+  method: string;
+  path: string;
+  url: string;
+  params?: Record<string, unknown>;
+  body?: unknown;
+}
+
+export class DryRunIntercept extends Error {
+  constructor(public readonly call: DryRunDescriptor) {
+    super(`[dry-run] ${call.method} ${call.path}`);
+    this.name = 'DryRunIntercept';
+  }
+}
+
 export class MediagraphClient {
   private apiUrl: string;
-  private getAccessToken: () => Promise<string | null>;
+  private resolveAuth: () => Promise<AuthCredentials | null>;
   private maxRetries = 3;
   private retryDelay = 1000;
+  /** When true, request() throws DryRunIntercept instead of executing. */
+  public dryRun: boolean;
 
   constructor(config: MediagraphClientConfig) {
     this.apiUrl = config.apiUrl || 'https://api.mediagraph.io';
-    this.getAccessToken = config.getAccessToken;
+    this.dryRun = config.dryRun ?? false;
+    if (config.getAuth) {
+      this.resolveAuth = config.getAuth;
+    } else if (config.getAccessToken) {
+      const legacy = config.getAccessToken;
+      this.resolveAuth = async () => {
+        const token = await legacy();
+        return token ? { mode: 'bearer', token } : null;
+      };
+    } else {
+      throw new Error('MediagraphClient requires getAuth or getAccessToken');
+    }
   }
 
   private async request<T>(
@@ -88,12 +156,22 @@ export class MediagraphClient {
       body?: unknown;
     } = {},
   ): Promise<T> {
-    const token = await this.getAccessToken();
-    if (!token) {
-      throw new Error('Not authenticated. Please authorize with Mediagraph first.');
+    let url = `${this.apiUrl}${path}`;
+
+    if (this.dryRun) {
+      throw new DryRunIntercept({
+        method,
+        path,
+        url,
+        params: options.params,
+        body: options.body,
+      });
     }
 
-    let url = `${this.apiUrl}${path}`;
+    const auth = await this.resolveAuth();
+    if (!auth) {
+      throw new Error('Not authenticated. Please authorize with Mediagraph first.');
+    }
 
     // Add query params for GET requests
     if (options.params && method === 'GET') {
@@ -118,10 +196,15 @@ export class MediagraphClient {
     for (let attempt = 0; attempt < this.maxRetries; attempt++) {
       try {
         const headers: Record<string, string> = {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         };
+        if (auth.mode === 'bearer') {
+          headers.Authorization = `Bearer ${auth.token}`;
+        } else {
+          headers.Authorization = `Basic ${Buffer.from(`:${auth.pat}`).toString('base64')}`;
+          headers.OrganizationId = String(auth.organizationId);
+        }
 
         const fetchOptions: RequestInit = {
           method,
@@ -157,11 +240,40 @@ export class MediagraphClient {
           });
         }
 
-        if (response.status === 429) {
-          const retryAfter = response.headers.get('Retry-After');
-          const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : this.retryDelay * Math.pow(2, attempt);
+        // 429 Too Many Requests + 503 Service Unavailable: both may carry a
+        // Retry-After header. Honor it within sane bounds; back off otherwise.
+        if (response.status === 429 || response.status === 503) {
+          const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
+          const exponential = this.retryDelay * Math.pow(2, attempt);
+          const delay = Math.min(retryAfterMs ?? exponential, MAX_RETRY_DELAY_MS);
+          const isFinalAttempt = attempt >= this.maxRetries - 1;
+          // If the server asks us to wait longer than we're willing to, or
+          // we've used all our attempts, surface a structured error so the
+          // CLI can render a useful hint instead of looping.
+          if (isFinalAttempt || (retryAfterMs !== undefined && retryAfterMs > MAX_RETRY_DELAY_MS)) {
+            const err = new MediagraphApiError(response.status, {
+              error: response.status === 429 ? 'rate_limited' : 'service_unavailable',
+              message: response.status === 429
+                ? 'Rate limit exceeded.'
+                : 'Service temporarily unavailable.',
+            });
+            err.retryAfterMs = retryAfterMs;
+            throw err;
+          }
           await this.sleep(delay);
           continue;
+        }
+
+        // Disabled PAT: the server still returns the response but flags it.
+        // Surface as auth error so callers don't silently treat it as success.
+        if (response.headers.get('X-PAT-Disabled')) {
+          const note = response.headers.get('X-PAT-Disabled-Note') || undefined;
+          const err = new MediagraphApiError(401, {
+            error: 'pat_disabled',
+            message: note ? `Personal Access Token is disabled: ${note}` : 'Personal Access Token is disabled.',
+          });
+          err.patDisabled = true;
+          throw err;
         }
 
         if (!response.ok) {
@@ -184,7 +296,10 @@ export class MediagraphClient {
       } catch (error) {
         lastError = error as Error;
 
-        if (error instanceof MediagraphApiError && [401, 403, 404].includes(error.statusCode)) {
+        // Don't retry these — they're either deterministic (auth/missing) or
+        // already represent an exhausted retry budget that the inner code
+        // chose to surface (429/503 with Retry-After above cap, final attempt).
+        if (error instanceof MediagraphApiError && [401, 403, 404, 429, 503].includes(error.statusCode)) {
           throw error;
         }
 
@@ -330,6 +445,22 @@ export class MediagraphClient {
 
   async getAssetFaceTaggings(id: number | string): Promise<FaceTagging[]> {
     return this.request<FaceTagging[]>('GET', `/api/assets/${id}/face_taggings`);
+  }
+
+  async tagVideoFace(id: number | string, data: { person_index: number; name?: string; tag_id?: number }): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/tag_video_face`, { body: data });
+  }
+
+  async detectVideoFaces(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/detect_video_faces`);
+  }
+
+  async explainAssetSearch(id: number | string, params?: { q?: string; text_q?: string }): Promise<unknown> {
+    return this.request('GET', `/api/assets/${id}/search_explain`, { params });
+  }
+
+  async deletePublishedImage(id: number | string): Promise<void> {
+    await this.request<void>('DELETE', `/api/published_images/${id}`);
   }
 
   async getAssetDownload(id: number | string, options?: {
@@ -545,8 +676,12 @@ export class MediagraphClient {
   // Tags
   // ============================================================================
 
-  async listTags(params?: PaginationParams & { q?: string }): Promise<Tag[]> {
+  async listTags(params?: PaginationParams & { q?: string; tag_import_id?: number }): Promise<Tag[]> {
     return this.request<Tag[]>('GET', '/api/tags', { params });
+  }
+
+  async checkTagName(name: string): Promise<{ exists: boolean }> {
+    return this.request<{ exists: boolean }>('GET', '/api/tags/check_name', { params: { name } });
   }
 
   async getTag(id: number | string): Promise<Tag> {
@@ -803,6 +938,10 @@ export class MediagraphClient {
     await this.request<void>('DELETE', `/api/shares/${id}`);
   }
 
+  async getShareStatus(id: number | string): Promise<{ aasm_state: string; progress?: number; code?: string; url?: string; direct_link?: string }> {
+    return this.request('GET', `/api/shares/${id}/status`);
+  }
+
   // ============================================================================
   // Collection Shares
   // ============================================================================
@@ -1024,6 +1163,13 @@ export class MediagraphClient {
     restore_all?: boolean;
     generate_alt_text?: boolean;
     alt_text_generation_prompt?: string;
+    rename_preset_id?: number;
+    rename_custom_text?: string;
+    rename_custom_text_2?: string;
+    rename_start_number?: number;
+    rename_global_start?: number;
+    rename_duplicate_resolution?: string;
+    rerun_auto_tag?: boolean;
   }): Promise<BulkJob> {
     return this.request<BulkJob>('POST', '/api/bulk_jobs', { body: { bulk_job: data } });
   }
@@ -1048,11 +1194,22 @@ export class MediagraphClient {
     return this.request('POST', '/api/bulk_jobs/cai_preview', { body: data });
   }
 
+  async previewRenameBulkJob(data: {
+    rename_preset_id: number;
+    asset_ids: number[];
+    custom_text?: string;
+    custom_text_2?: string;
+    start_number?: number;
+    global_start?: number;
+  }): Promise<unknown> {
+    return this.request('POST', '/api/bulk_jobs/rename_preview', { body: data });
+  }
+
   // ============================================================================
   // Custom Meta Fields
   // ============================================================================
 
-  async listCustomMetaFields(params?: PaginationParams): Promise<CustomMetaField[]> {
+  async listCustomMetaFields(params?: PaginationParams & { enable_rename?: boolean }): Promise<CustomMetaField[]> {
     return this.request<CustomMetaField[]>('GET', '/api/custom_meta_fields', { params });
   }
 
@@ -1074,6 +1231,10 @@ export class MediagraphClient {
 
   async exportCustomMetaField(id: number | string): Promise<unknown> {
     return this.request('GET', `/api/custom_meta_fields/${id}/export`);
+  }
+
+  async exportCustomMetaFields(ids: number[]): Promise<unknown> {
+    return this.request('POST', '/api/custom_meta_fields/export', { body: { ids } });
   }
 
   async importCustomMetaFields(settings: string): Promise<unknown> {
@@ -1469,5 +1630,127 @@ export class MediagraphClient {
 
   async deletePersonalAccessToken(id: number | string): Promise<void> {
     await this.request<void>('DELETE', `/api/personal_access_tokens/${id}`);
+  }
+
+  async disablePersonalAccessToken(id: number | string): Promise<PersonalAccessToken> {
+    return this.request<PersonalAccessToken>('POST', `/api/personal_access_tokens/${id}/disable`);
+  }
+
+  async enablePersonalAccessToken(id: number | string): Promise<PersonalAccessToken> {
+    return this.request<PersonalAccessToken>('POST', `/api/personal_access_tokens/${id}/enable`);
+  }
+
+  // ============================================================================
+  // Tag Imports (CSV/XLS)
+  // ============================================================================
+
+  async listTagImports(params?: PaginationParams): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/tag_imports', { params });
+  }
+
+  async getTagImport(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/tag_imports/${id}`);
+  }
+
+  async createTagImport(data: { file: string; note?: string; name_column?: string; columns?: unknown }): Promise<unknown> {
+    return this.request('POST', '/api/tag_imports', { body: { tag_import: data } });
+  }
+
+  async updateTagImport(id: number | string, data: Record<string, unknown>): Promise<unknown> {
+    return this.request('PUT', `/api/tag_imports/${id}`, { body: { tag_import: data } });
+  }
+
+  async deleteTagImport(id: number | string): Promise<void> {
+    await this.request<void>('DELETE', `/api/tag_imports/${id}`);
+  }
+
+  async updateTagImportMapping(id: number | string, column: { name: string; mapping: string }): Promise<unknown> {
+    return this.request('PUT', `/api/tag_imports/${id}/mapping`, { body: { column } });
+  }
+
+  async startTagImportProcess(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/tag_imports/${id}/start_process`);
+  }
+
+  async getTagImportTags(id: number | string, params?: PaginationParams): Promise<Tag[]> {
+    return this.request<Tag[]>('GET', `/api/tag_imports/${id}/tags`, { params });
+  }
+
+  // ============================================================================
+  // Rename Presets (Lightroom-style filename templates)
+  // ============================================================================
+
+  async listRenamePresets(params?: PaginationParams & { enabled?: boolean }): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/rename_presets', { params });
+  }
+
+  async getRenamePreset(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/rename_presets/${id}`);
+  }
+
+  async createRenamePreset(data: {
+    name: string;
+    enabled?: boolean;
+    position?: number;
+    template?: Array<Record<string, unknown>>;
+  }): Promise<unknown> {
+    return this.request('POST', '/api/rename_presets', { body: { rename_preset: data } });
+  }
+
+  async updateRenamePreset(id: number | string, data: Record<string, unknown>): Promise<unknown> {
+    return this.request('PUT', `/api/rename_presets/${id}`, { body: { rename_preset: data } });
+  }
+
+  async deleteRenamePreset(id: number | string): Promise<void> {
+    await this.request<void>('DELETE', `/api/rename_presets/${id}`);
+  }
+
+  async updateRenamePresetPosition(oldIndex: number, newIndex: number): Promise<unknown> {
+    return this.request('PUT', '/api/rename_presets/update_position', { body: { oldIndex, newIndex } });
+  }
+
+  // ============================================================================
+  // Meta Downloads (background CSV export)
+  // ============================================================================
+
+  async listMetaDownloads(params?: PaginationParams & { dates?: string[]; user_id?: number }): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/meta_downloads', { params });
+  }
+
+  async getMetaDownloadColumns(): Promise<unknown> {
+    return this.request('GET', '/api/meta_downloads/columns');
+  }
+
+  async createMetaDownload(data: {
+    asset_ids: string;
+    column_preset?: 'basic' | 'custom';
+    columns?: string[];
+    send_email?: boolean;
+  }): Promise<{ guid: string }> {
+    return this.request<{ guid: string }>('POST', '/api/download_meta', { body: data });
+  }
+
+  async updateMetaDownload(guid: string, send_email: boolean): Promise<unknown> {
+    return this.request('PUT', `/api/download_meta/${guid}`, { body: { send_email } });
+  }
+
+  // ============================================================================
+  // Organization CAI Budget / Trials (super-admin)
+  // ============================================================================
+
+  async addOrganizationCaiBudget(id: number | string, data: { amount?: number; description?: string }): Promise<unknown> {
+    return this.request('POST', `/api/organizations/${id}/admin_add_cai_budget`, { body: data });
+  }
+
+  async grantOrganizationCaiBudget(id: number | string, data: { amount?: number; description?: string }): Promise<unknown> {
+    return this.request('POST', `/api/organizations/${id}/admin_grant_cai_budget`, { body: data });
+  }
+
+  async markOrganizationCaiInvoicePaid(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/organizations/${id}/mark_cai_invoice_paid`);
+  }
+
+  async extendOrganizationTrial(id: number | string, data: { days?: number; until?: string }): Promise<unknown> {
+    return this.request('POST', `/admin/organizations/${id}/extend_trial`, { body: data });
   }
 }

@@ -238,6 +238,71 @@ export const adminTools: ToolModule = {
       description: 'Delete a personal access token',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
+    {
+      name: 'disable_personal_access_token',
+      description: 'Super-admin: disable a PAT (requests respond with X-PAT-Disabled header)',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'enable_personal_access_token',
+      description: 'Super-admin: re-enable a previously disabled PAT',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+
+    // Organization CAI budget / trials (super-admin)
+    {
+      name: 'add_organization_cai_budget',
+      description: 'Super-admin: send a Stripe invoice for a CAI budget top-up',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          amount: { type: 'number', description: 'Top-up amount' },
+          description: { type: 'string' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'grant_organization_cai_budget',
+      description: 'Super-admin: grant free CAI budget to an organization',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          amount: { type: 'number' },
+          description: { type: 'string' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'mark_organization_cai_invoice_paid',
+      description: 'Super-admin: mark an open CAI invoice as paid out-of-band',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'extend_organization_trial',
+      description: 'Admin: extend a trialing/past_due/canceled subscription',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          days: { type: 'number', description: 'Number of days to extend by' },
+          until: { type: 'string', description: 'ISO 8601 datetime to extend until (alternative to days)' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'export_custom_meta_fields',
+      description: 'Bulk export custom meta fields by ID',
+      inputSchema: {
+        type: 'object',
+        properties: { ids: { type: 'array', items: { type: 'number' } } },
+        required: ['ids'],
+      },
+    },
   ],
 
   handlers: {
@@ -346,6 +411,41 @@ export const adminTools: ToolModule = {
     async delete_personal_access_token(args, { client }) {
       await client.deletePersonalAccessToken(args.id as number | string);
       return successResult({ success: true });
+    },
+    async disable_personal_access_token(args, { client }) {
+      return successResult(await client.disablePersonalAccessToken(args.id as number | string));
+    },
+    async enable_personal_access_token(args, { client }) {
+      return successResult(await client.enablePersonalAccessToken(args.id as number | string));
+    },
+
+    // Organization CAI budget / trials
+    async add_organization_cai_budget(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.addOrganizationCaiBudget(
+        id as number | string,
+        rest as { amount?: number; description?: string },
+      ));
+    },
+    async grant_organization_cai_budget(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.grantOrganizationCaiBudget(
+        id as number | string,
+        rest as { amount?: number; description?: string },
+      ));
+    },
+    async mark_organization_cai_invoice_paid(args, { client }) {
+      return successResult(await client.markOrganizationCaiInvoicePaid(args.id as number | string));
+    },
+    async extend_organization_trial(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.extendOrganizationTrial(
+        id as number | string,
+        rest as { days?: number; until?: string },
+      ));
+    },
+    async export_custom_meta_fields(args, { client }) {
+      return successResult(await client.exportCustomMetaFields(args.ids as number[]));
     },
   },
 };
