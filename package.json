@@ -1,6 +1,6 @@
 {
   "name": "@mediagraph/cli",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "CLI and MCP server for Mediagraph - Digital Asset Management Platform",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
