@@ -149,16 +149,24 @@ export class Runtime {
       let stored: StoredTokens = { tokens };
       this.tokenStore.save(stored);
       try {
-        const whoami = await this.client.whoami();
-        const org = whoami?.organization as { id?: number; name?: string; title?: string; slug?: string } | undefined;
+        // The server's /api/whoami returns the User object at the top level
+        // with organization/membership merged onto it (current_user.as_json
+        // .merge(organization:, membership:, oauth_token:)) — NOT nested
+        // under `user`. Read accordingly.
+        const whoami = await this.client.whoami() as unknown as {
+          id?: number;
+          email?: string;
+          organization?: { id?: number; name?: string; title?: string; slug?: string };
+        };
+        const org = whoami.organization;
         if (org?.id) {
           stored = {
             tokens,
             organizationId: org.id,
             organizationName: org.title || org.name,
             organizationSlug: org.slug,
-            userId: whoami.user?.id,
-            userEmail: whoami.user?.email,
+            userId: whoami.id,
+            userEmail: whoami.email,
           };
           this.tokenStore.save(stored);
         }

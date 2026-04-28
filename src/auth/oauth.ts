@@ -100,6 +100,7 @@ export class OAuthHandler {
     resolve: (result: OAuthCallbackResult) => void;
     reject: (error: Error) => void;
   } | null = null;
+  private callbackTimeout: NodeJS.Timeout | null = null;
 
   /**
    * Start the callback server and wait for it to be ready
@@ -204,14 +205,19 @@ export class OAuthHandler {
     return new Promise((resolve, reject) => {
       this.callbackPromise = { resolve, reject };
 
-      // Timeout after 5 minutes
-      setTimeout(() => {
+      // Timeout after 5 minutes. The timer is `unref()`'d so it doesn't
+      // pin the event loop on its own — once the callback server is closed,
+      // the process can exit even if this timer is still pending.
+      this.callbackTimeout = setTimeout(() => {
+        this.callbackTimeout = null;
         if (this.callbackPromise) {
-          this.stopCallbackServer();
-          this.callbackPromise.reject(new Error('Authorization timed out'));
+          const promise = this.callbackPromise;
           this.callbackPromise = null;
+          this.stopCallbackServer();
+          promise.reject(new Error('Authorization timed out'));
         }
       }, 5 * 60 * 1000);
+      this.callbackTimeout.unref();
     });
   }
 
@@ -234,6 +240,10 @@ export class OAuthHandler {
    * forcibly so the process exits immediately.
    */
   stopCallbackServer(): void {
+    if (this.callbackTimeout) {
+      clearTimeout(this.callbackTimeout);
+      this.callbackTimeout = null;
+    }
     if (this.callbackServer) {
       const server = this.callbackServer;
       this.callbackServer = null;
