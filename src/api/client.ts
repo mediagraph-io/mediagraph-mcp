@@ -68,15 +68,21 @@ export interface MediagraphClientConfig {
   dryRun?: boolean;
 }
 
+/** 403 envelope when the server's scope check rejects a request. */
+export interface InsufficientScopeBody extends ApiError {
+  error: 'insufficient_scope';
+  reason?: 'scope' | 'admin_required';
+  required?: string;
+}
+
 export class MediagraphApiError extends Error {
-  /**
-   * Retry-After value in milliseconds when the server set the header (429/503).
-   * Useful for callers (CLI `--wait`, sync runner) that want to back off
-   * smarter than the next scheduled tick.
-   */
+  /** Retry-After value (ms) on 429/503 — callers honor this for backoff. */
   public retryAfterMs?: number;
   /** True when the server set X-PAT-Disabled (PAT was disabled by an admin). */
   public patDisabled?: boolean;
+  /** Method + path of the blocked request, when known. */
+  public method?: string;
+  public path?: string;
 
   constructor(
     public statusCode: number,
@@ -84,6 +90,19 @@ export class MediagraphApiError extends Error {
   ) {
     super(errorBody.message || errorBody.error || 'API Error');
     this.name = 'MediagraphApiError';
+  }
+
+  /** True when the 403 body is the structured insufficient_scope envelope. */
+  get insufficientScope(): boolean {
+    return this.statusCode === 403 && this.errorBody.error === 'insufficient_scope';
+  }
+  get requiredScope(): string | undefined {
+    return this.insufficientScope ? (this.errorBody as InsufficientScopeBody).required : undefined;
+  }
+  get scopeReason(): 'scope' | 'admin_required' | undefined {
+    if (!this.insufficientScope) return undefined;
+    const r = (this.errorBody as InsufficientScopeBody).reason;
+    return r === 'admin_required' || r === 'scope' ? r : undefined;
   }
 }
 
@@ -235,10 +254,18 @@ export class MediagraphClient {
         }
 
         if (response.status === 403) {
-          throw new MediagraphApiError(403, {
-            error: 'forbidden',
-            message: 'You do not have permission to perform this action.',
-          });
+          // Preserve the body so insufficient_scope envelopes survive — the
+          // class derives `requiredScope`/`scopeReason` from it.
+          let body: ApiError;
+          try {
+            body = (await response.json()) as ApiError;
+          } catch {
+            body = { error: 'forbidden', message: 'You do not have permission to perform this action.' };
+          }
+          const err = new MediagraphApiError(403, body);
+          err.method = method;
+          err.path = path;
+          throw err;
         }
 
         if (response.status === 404) {

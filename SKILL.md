@@ -25,11 +25,29 @@ at [docs.mediagraph.io](https://docs.mediagraph.io).
 ```bash
 npm install -g @mediagraph/cli        # provides the `mediagraph` command
 mediagraph skill                       # → prints this guide; start here cold
-mediagraph auth login                  # OAuth, opens a browser, persists tokens
-mediagraph auth status                 # JSON: {authenticated, organization, user, token}
+mediagraph auth login                  # OAuth, opens a browser, persists tokens (full read-write)
+mediagraph auth login --read-only      # OAuth with :read on every entity (safer for grants)
+mediagraph auth login --scope "asset:read,tag:write,collections:write"
+                                       # OAuth with a specific scope set
+mediagraph auth status                 # JSON: {authenticated, organization, user, token, scopes}
 ```
 
 Tokens persist at `~/.mediagraph/tokens.enc`. Refresh is automatic.
+
+### Scopes
+
+Scopes are entity-level (`asset:write`, `comment:read`, `webhook:write`) with
+group-level shorthand for back-compat (`assets:write` covers every entity in
+the `assets` group). `write` implies `read` for the same key. Sibling
+entities are independent unless granted via the group form.
+
+`auth status` surfaces the current OAuth token's scopes (`scopes.list`) and
+flags legacy/empty lists as `fullAccess: true`. PAT scopes can't be
+introspected from the CLI — they're set at PAT creation. When the server
+rejects a request with `error: "insufficient_scope"`, the CLI surfaces a
+structured `INSUFFICIENT_SCOPE` error (exit 3) naming the missing scope, its
+group, and how to remediate (`scope` → regenerate; `admin_required` →
+reauthorize from an admin membership).
 
 ### Headless / CI auth (Personal Access Token)
 
@@ -71,9 +89,14 @@ Output:
   - `2` argument parse error (`BAD_ARGS`)
   - `3` auth required (`AUTH_REQUIRED`)
 
-Stable error codes (`code` field): `AUTH_REQUIRED`, `BAD_ARGS`,
-`UNKNOWN_COMMAND`, `UNKNOWN_TOOL`, `NOT_FOUND`, `RUN_LOCKED`, `NETWORK`,
-`RATE_LIMITED`, `TOOL_ERROR`, `CONFIG_ERROR`, `INTERNAL`.
+Stable error codes (`code` field): `AUTH_REQUIRED`, `INSUFFICIENT_SCOPE`,
+`BAD_ARGS`, `UNKNOWN_COMMAND`, `UNKNOWN_TOOL`, `NOT_FOUND`, `RUN_LOCKED`,
+`NETWORK`, `RATE_LIMITED`, `TOOL_ERROR`, `CONFIG_ERROR`, `INTERNAL`.
+
+`INSUFFICIENT_SCOPE` (exit 3) is permanent for the current token — do not
+retry. The error `context` carries `{required, entity, group, reason, tier,
+method, path}` so you can decide whether to ask the user to re-`auth login`
+with broader scopes, or to grant a specific one.
 
 ### Global flags (work with any tool)
 
@@ -105,7 +128,7 @@ Top-level commands:
 | --- | --- |
 | `skill` | Print this agent guide |
 | `serve` | Start MCP server (stdio). Used by Claude Desktop, etc. |
-| `auth login` / `auth logout` / `auth status` | OAuth lifecycle |
+| `auth login [--read-only \| --scope <CSV>]` / `auth logout` / `auth status` | OAuth lifecycle (default = full read-write) |
 | `list-tools` | Print every tool name, description, required + optional flags |
 | `search-tools <query>` | Ranked keyword search over the tool registry |
 | `sync ...` | Continuous folder sync (see below) |

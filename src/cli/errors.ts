@@ -5,13 +5,17 @@
  * agents can branch without parsing prose. Exit codes:
  *   1 — runtime/server/tool error (most cases)
  *   2 — argument parse error
- *   3 — permission / auth required
+ *   3 — permission / auth required (also used for INSUFFICIENT_SCOPE)
  *
  * Codes are flat strings (not numeric) so additions don't shift values.
  */
 
+import { MediagraphApiError } from '../api/client.js';
+import { groupForEntity, scopeTier, type ScopeLevel, type ScopeTier } from '../api/scopes.js';
+
 export type ErrorCode =
   | 'AUTH_REQUIRED'      // No token, or refresh failed. Re-run `auth login`.
+  | 'INSUFFICIENT_SCOPE' // Token authenticated but lacks the scope for this call.
   | 'BAD_ARGS'           // Caller passed bad/missing flags. Exit 2.
   | 'UNKNOWN_COMMAND'    // Top-level command isn't recognized.
   | 'UNKNOWN_TOOL'       // Tool name doesn't exist in the registry.
@@ -52,7 +56,7 @@ export function emitError(err: CliError | Error | string, fallbackCode: ErrorCod
 
 export function exitCodeFor(code: ErrorCode): number {
   if (code === 'BAD_ARGS') return 2;
-  if (code === 'AUTH_REQUIRED') return 3;
+  if (code === 'AUTH_REQUIRED' || code === 'INSUFFICIENT_SCOPE') return 3;
   return 1;
 }
 
@@ -70,34 +74,70 @@ export function classify(error: unknown): CliError {
   if (/Not authenticated|authoriz/i.test(message)) {
     return new CliError('AUTH_REQUIRED', message, 'Run `mediagraph auth login` (interactive) or set MEDIAGRAPH_PAT for headless auth.');
   }
-  // API client raises MediagraphApiError with statusCode; sniff via duck typing
-  const anyErr = error as { statusCode?: number; errorBody?: unknown; retryAfterMs?: number; patDisabled?: boolean };
-  if (typeof anyErr.statusCode === 'number') {
-    if (anyErr.patDisabled) {
+  if (error instanceof MediagraphApiError) {
+    if (error.insufficientScope) return buildScopeError(error);
+    if (error.patDisabled) {
       return new CliError('AUTH_REQUIRED', message,
         'PAT is disabled. Generate a new token, or contact an admin to re-enable it.');
     }
-    if (anyErr.statusCode === 401 || anyErr.statusCode === 403) {
+    if (error.statusCode === 401 || error.statusCode === 403) {
       return new CliError('AUTH_REQUIRED', message, 'Token may be expired or lacks scope. Re-run `mediagraph auth login`.');
     }
-    if (anyErr.statusCode === 404) {
+    if (error.statusCode === 404) {
       return new CliError('NOT_FOUND', message);
     }
-    if (anyErr.statusCode === 429 || anyErr.statusCode === 503) {
-      const seconds = anyErr.retryAfterMs ? Math.ceil(anyErr.retryAfterMs / 1000) : undefined;
+    if (error.statusCode === 429 || error.statusCode === 503) {
+      const seconds = error.retryAfterMs ? Math.ceil(error.retryAfterMs / 1000) : undefined;
       const hint = seconds !== undefined
         ? `Server requested a retry in ~${seconds}s. Re-run after that delay.`
         : 'Back off and retry. PAT default rate limit is 300 req/min.';
-      const code: ErrorCode = anyErr.statusCode === 429 ? 'RATE_LIMITED' : 'NETWORK';
-      return new CliError(code, message, hint, {
-        statusCode: anyErr.statusCode,
-        retryAfterMs: anyErr.retryAfterMs,
-      });
+      const code: ErrorCode = error.statusCode === 429 ? 'RATE_LIMITED' : 'NETWORK';
+      return new CliError(code, message, hint, { statusCode: error.statusCode, retryAfterMs: error.retryAfterMs });
     }
-    return new CliError('TOOL_ERROR', message, undefined, { statusCode: anyErr.statusCode, body: anyErr.errorBody });
+    return new CliError('TOOL_ERROR', message, undefined, { statusCode: error.statusCode, body: error.errorBody });
   }
   if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(message)) {
     return new CliError('NETWORK', message, 'Check connectivity and MEDIAGRAPH_API_URL.');
   }
   return new CliError('INTERNAL', message);
+}
+
+// Server's `required` is entity-level (e.g. `asset:write`); we annotate with
+// the owning group so the agent can either grant the entity scope or the
+// group-level form that bridges siblings.
+const TIER_NOTE: Record<ScopeTier, (group: string) => string> = {
+  basic: (g) => ` (${g} group — basic; any member can grant)`,
+  advanced: (g) => ` (${g} group — advanced; requires admin role on the issuing membership)`,
+};
+
+function buildScopeError(err: MediagraphApiError): CliError {
+  const required = err.requiredScope ?? '<unknown>';
+  const reason = err.scopeReason ?? 'scope';
+  const [entity, levelRaw] = required.includes(':') ? required.split(':') : [null, null];
+  const level: ScopeLevel = levelRaw === 'write' ? 'write' : 'read';
+  const group = entity ? groupForEntity(entity) : null;
+  let tier: ScopeTier | null = null;
+  if (entity) {
+    try { tier = scopeTier(entity); } catch { /* unknown entity → no tier */ }
+  }
+  const tierNote = tier && group ? TIER_NOTE[tier](group) : '';
+  const where = err.method && err.path ? `${err.method} ${err.path}` : 'this request';
+  const remediation = reason === 'admin_required'
+    ? 'The token includes the scope but the issuing membership lost admin role. Have an admin restore the role, or reauthorize the token from an admin membership.'
+    : `Regenerate the PAT (or reauthorize the OAuth app) with \`${required}\` included${group ? ` (or the group-level \`${group}:${level}\` for sibling entities)` : ''}.`;
+
+  const message = [
+    `Request blocked by token scope on ${where}: missing \`${required}\`${tierNote}.`,
+    `Reason: ${reason}.`,
+    `Fix: ${remediation}`,
+  ].join(' ');
+  return new CliError('INSUFFICIENT_SCOPE', message, remediation, {
+    required,
+    entity: entity ?? undefined,
+    group: group ?? undefined,
+    reason,
+    method: err.method,
+    path: err.path,
+    tier: tier ?? undefined,
+  });
 }

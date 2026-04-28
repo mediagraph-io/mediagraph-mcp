@@ -29,6 +29,7 @@ import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 import { DryRunIntercept, type MediagraphClient } from '../api/client.js';
+import { allEntityScopes, parseScopeArg } from '../api/scopes.js';
 import { Runtime, getAuthStatus, runLogout } from '../core/runtime.js';
 import { handleTool, toolDefinitions } from '../tools/index.js';
 import type { ToolDefinition } from '../tools/shared.js';
@@ -48,11 +49,14 @@ Usage:
   mediagraph --version                    Print the package version
   mediagraph skill                        Print the agent skill guide (start here)
   mediagraph serve                        Start the MCP server (stdio)
-  mediagraph auth login                   OAuth-authorize with Mediagraph
+  mediagraph auth login                   OAuth-authorize with Mediagraph (default: full read-write)
+  mediagraph auth login --read-only       OAuth, request only :read on every entity
+  mediagraph auth login --scope <CSV>     OAuth, request only the given scopes
+                                          (e.g. "asset:read,tag:read,collections:write")
   mediagraph auth login --pat <T> --org <ID>
                                           Persist a PAT for headless use
   mediagraph auth logout                  Revoke and clear stored tokens
-  mediagraph auth status                  Show current auth status (JSON)
+  mediagraph auth status                  Show current auth status + scopes (JSON)
   mediagraph list-tools [--brief]         List all tools (JSON)
   mediagraph search-tools <query>         Find tools by keyword
   mediagraph sync ...                     Continuous folder sync
@@ -299,6 +303,38 @@ function writeOutput(
   emit(env);
 }
 
+/**
+ * Resolve scope flags on `auth login`:
+ *   --read-only            preset: every entity at :read
+ *   --scope <CSV>          explicit list (entity or group keys; bare → :write)
+ * Mutually exclusive — `--scope` wins if both are passed but we surface a
+ * BAD_ARGS so the caller knows the read-only flag was silently overridden.
+ * Returns undefined when no scope flag is given (use OAuth handler default).
+ */
+function parseLoginScopeFlags(args: string[]): string[] | undefined {
+  const readOnly = args.includes('--read-only');
+  const scopeIdx = args.findIndex(a => a === '--scope' || a === '--scopes');
+  const explicit = scopeIdx !== -1 ? args[scopeIdx + 1] : undefined;
+
+  if (readOnly && explicit !== undefined) {
+    throw new CliError('BAD_ARGS', '--read-only and --scope are mutually exclusive.',
+      'Pass one or the other.');
+  }
+  if (explicit !== undefined) {
+    if (!explicit || explicit.startsWith('-')) {
+      throw new CliError('BAD_ARGS', '--scope requires a value (CSV of scope keys).',
+        'Example: --scope "asset:read,tag:read,collections:write"');
+    }
+    try {
+      return parseScopeArg(explicit);
+    } catch (e) {
+      throw new CliError('BAD_ARGS', e instanceof Error ? e.message : String(e));
+    }
+  }
+  if (readOnly) return allEntityScopes('read');
+  return undefined;
+}
+
 async function runAuth(runtime: Runtime, command: string, rest: string[]): Promise<void> {
   const sub = command === 'auth' ? rest[0] : command;
   const subArgs = command === 'auth' ? rest.slice(1) : rest;
@@ -324,7 +360,8 @@ async function runAuth(runtime: Runtime, command: string, rest: string[]): Promi
         }, null, 2)}\n`);
         return;
       }
-      const ok = await runtime.runAutoAuth();
+      const scopes = parseLoginScopeFlags(subArgs);
+      const ok = await runtime.runAutoAuth(scopes);
       if (!ok) throw new CliError('AUTH_REQUIRED', 'OAuth authorization failed.');
       emit(getAuthStatus(runtime));
       return;

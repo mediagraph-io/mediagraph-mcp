@@ -14,6 +14,7 @@ import { isPaginated, paginate } from '../cli/pagination.js';
 import { stripGlobalFlags } from '../cli/global_flags.js';
 import { waitForTerminal, WaitTimeout } from '../cli/wait.js';
 import { MediagraphClient, MediagraphApiError, DryRunIntercept } from '../api/client.js';
+import { getAuthStatus, type Runtime } from '../core/runtime.js';
 import type { ToolDefinition, ToolResult } from '../tools/shared.js';
 import { toolDefinitions } from '../tools/index.js';
 
@@ -52,6 +53,79 @@ describe('cli/errors', () => {
     expect(cli.hint).toMatch(/PAT is disabled/);
   });
 
+  describe('insufficient_scope envelope (entity-level)', () => {
+    it('classifies an entity-level insufficient_scope 403 with entity + group context (acceptance)', () => {
+      const apiErr = new MediagraphApiError(403, {
+        error: 'insufficient_scope',
+        message: 'token missing required scope',
+        reason: 'scope',
+        required: 'asset:write',
+      } as never);
+      apiErr.method = 'POST';
+      apiErr.path = '/api/assets';
+
+      const cli = classify(apiErr);
+      expect(cli.code).toBe('INSUFFICIENT_SCOPE');
+      // Must surface: method+path, the entity-level required scope verbatim,
+      // the owning group ("assets"), the tier (basic), the reason, and a fix.
+      expect(cli.message).toContain('POST /api/assets');
+      expect(cli.message).toContain('asset:write');
+      expect(cli.message).toContain('assets group');
+      expect(cli.message).toContain('basic');
+      expect(cli.message).toMatch(/Reason: scope/);
+      expect(cli.message).toMatch(/Regenerate the PAT/);
+      // Group-level back-compat hint should be offered too.
+      expect(cli.message).toMatch(/assets:write/);
+      expect(cli.context).toMatchObject({
+        required: 'asset:write',
+        entity: 'asset',
+        group: 'assets',
+        reason: 'scope',
+        method: 'POST',
+        path: '/api/assets',
+        tier: 'basic',
+      });
+    });
+
+    it('flags advanced tier and produces a different remediation for admin_required (acceptance)', () => {
+      const apiErr = new MediagraphApiError(403, {
+        error: 'insufficient_scope',
+        message: 'admin role required to use this scope',
+        reason: 'admin_required',
+        required: 'webhook:write',
+      } as never);
+      apiErr.method = 'POST';
+      apiErr.path = '/api/webhooks';
+
+      const cli = classify(apiErr);
+      expect(cli.code).toBe('INSUFFICIENT_SCOPE');
+      expect(cli.message).toContain('webhooks group');
+      expect(cli.message).toContain('advanced');
+      expect(cli.message).toMatch(/Reason: admin_required/);
+      expect(cli.message).toMatch(/lost admin role/);
+      // Crucially, the admin_required remediation must NOT be the same prose
+      // as the plain `scope` reason ("Regenerate the PAT...").
+      expect(cli.message).not.toMatch(/Regenerate the PAT \(or reauthorize the OAuth app\) with `webhook:write`/);
+      expect(cli.context).toMatchObject({
+        entity: 'webhook',
+        group: 'webhooks',
+        tier: 'advanced',
+        reason: 'admin_required',
+      });
+    });
+
+    it('still surfaces a plain 403 (CanCan-style) as the existing AUTH_REQUIRED, not the new code', () => {
+      const apiErr = new MediagraphApiError(403, {
+        error: 'forbidden',
+        message: 'You do not have permission to perform this action.',
+      });
+      // No insufficientScope flag → don't repath to the new code.
+      const cli = classify(apiErr);
+      expect(cli.code).toBe('AUTH_REQUIRED');
+      expect(cli.code).not.toBe('INSUFFICIENT_SCOPE');
+    });
+  });
+
   it('classifies network failures', () => {
     expect(classify(new Error('fetch failed: ECONNREFUSED')).code).toBe('NETWORK');
   });
@@ -63,6 +137,79 @@ describe('cli/errors', () => {
 
   it('falls back to INTERNAL for unknown errors', () => {
     expect(classify(new Error('boom')).code).toBe('INTERNAL');
+  });
+});
+
+describe('core/runtime — getAuthStatus exposes scopes', () => {
+  // We hand-build a minimal Runtime stub: the only surface getAuthStatus
+  // touches is isPatMode(), config.patOrganizationId, and tokenStore.load().
+  function fakeRuntime(opts: {
+    pat?: boolean;
+    patOrgId?: number;
+    stored?: {
+      tokens?: { access_token: string; expires_at: number; refresh_token?: string; scope?: string; token_type: string; expires_in: number };
+      organizationName?: string;
+      organizationSlug?: string;
+      organizationId?: number;
+      userId?: number;
+      userEmail?: string;
+    } | null;
+  }): Runtime {
+    return {
+      isPatMode: () => !!opts.pat,
+      config: { patOrganizationId: opts.patOrgId },
+      tokenStore: { load: () => opts.stored ?? null },
+    } as unknown as Runtime;
+  }
+
+  it('OAuth: parses RFC 6749 scope string into array, marks granular as not full-access', () => {
+    const status = getAuthStatus(fakeRuntime({
+      stored: {
+        tokens: {
+          access_token: 't', expires_at: Date.now() + 600_000, token_type: 'Bearer', expires_in: 3600,
+          scope: 'assets:read assets:write tags:read',
+        },
+        organizationName: 'Org', organizationSlug: 'org', organizationId: 1,
+      },
+    }));
+    expect(status.authenticated).toBe(true);
+    expect(status.mode).toBe('oauth');
+    expect(status.scopes?.list).toEqual(['assets:read', 'assets:write', 'tags:read']);
+    expect(status.scopes?.fullAccess).toBe(false);
+  });
+
+  it('OAuth: legacy [read, write] scope is full-access', () => {
+    const status = getAuthStatus(fakeRuntime({
+      stored: {
+        tokens: { access_token: 't', expires_at: Date.now() + 1, token_type: 'Bearer', expires_in: 3600, scope: 'read write' },
+      },
+    }));
+    expect(status.scopes?.list).toEqual(['read', 'write']);
+    expect(status.scopes?.fullAccess).toBe(true);
+  });
+
+  it('OAuth: missing scope field surfaces empty list as full-access', () => {
+    const status = getAuthStatus(fakeRuntime({
+      stored: {
+        tokens: { access_token: 't', expires_at: Date.now() + 1, token_type: 'Bearer', expires_in: 3600 },
+      },
+    }));
+    expect(status.scopes?.list).toEqual([]);
+    expect(status.scopes?.fullAccess).toBe(true);
+  });
+
+  it('PAT mode: scopes are unintrospectable from CLI; surfaces a hint instead of guessing', () => {
+    const status = getAuthStatus(fakeRuntime({ pat: true, patOrgId: 7 }));
+    expect(status.mode).toBe('pat');
+    expect(status.scopes?.list).toBeUndefined();
+    expect(status.scopes?.fullAccess).toBeUndefined();
+    expect(status.scopes?.note).toMatch(/list_personal_access_tokens/);
+  });
+
+  it('Unauthenticated: returns no scopes block', () => {
+    const status = getAuthStatus(fakeRuntime({ stored: null }));
+    expect(status.authenticated).toBe(false);
+    expect(status.scopes).toBeUndefined();
   });
 });
 

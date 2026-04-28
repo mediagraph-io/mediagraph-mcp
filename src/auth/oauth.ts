@@ -73,18 +73,21 @@ export class OAuthHandler {
   }
 
   /**
-   * Build the authorization URL for OAuth flow
+   * Build the authorization URL for OAuth flow. Pass `overrideScopes` to
+   * request a specific scope set for this login (e.g. read-only preset);
+   * otherwise the handler's default scopes are used.
    */
-  getAuthorizationUrl(): string {
+  getAuthorizationUrl(overrideScopes?: readonly string[]): string {
     const { verifier, challenge } = this.generatePKCE();
     this.codeVerifier = verifier;
     this.state = this.generateState();
 
+    const scopes = overrideScopes && overrideScopes.length > 0 ? overrideScopes : this.config.scopes;
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.config.clientId,
       redirect_uri: this.getRedirectUri(),
-      scope: this.config.scopes.join(' '),
+      scope: scopes.join(' '),
       state: this.state,
       code_challenge: challenge,
       code_challenge_method: 'S256',

@@ -12,6 +12,7 @@ import { platform } from 'node:os';
 import { MediagraphClient, type AuthCredentials } from '../api/client.js';
 import { OAuthHandler, type TokenData } from '../auth/oauth.js';
 import { TokenStore, type StoredTokens } from '../auth/token-store.js';
+import { isFullAccessScopeList } from '../api/scopes.js';
 import type { ToolContext } from '../tools/shared.js';
 
 const DEFAULT_CLIENT_ID = '7Y8rlAetr9IK2N91X4wCvVlo2hQLX6nJvFY1N8CY0GI';
@@ -123,8 +124,11 @@ export class Runtime {
     return null;
   }
 
-  /** Run the full OAuth handshake, persist tokens, and return success. */
-  async runAutoAuth(): Promise<boolean> {
+  /**
+   * Run the full OAuth handshake, persist tokens, and return success.
+   * Pass `scopes` to request a specific scope set (e.g. read-only preset).
+   */
+  async runAutoAuth(scopes?: readonly string[]): Promise<boolean> {
     if (this.authInProgress) {
       const start = Date.now();
       while (this.authInProgress && Date.now() - start < 120000) {
@@ -135,7 +139,7 @@ export class Runtime {
 
     this.authInProgress = true;
     try {
-      const authUrl = this.oauth.getAuthorizationUrl();
+      const authUrl = this.oauth.getAuthorizationUrl(scopes);
       await this.oauth.startCallbackServer();
       openBrowser(authUrl);
       const { code } = await this.oauth.waitForCallback();
@@ -201,11 +205,28 @@ export class Runtime {
   }
 }
 
+export interface ScopeStatus {
+  /**
+   * Parsed scope list. For OAuth tokens this comes from the RFC 6749 `scope`
+   * string in the grant. For PAT, undefined — the server does not expose the
+   * current PAT's scopes via /api/whoami, so the CLI can't introspect them.
+   */
+  list?: string[];
+  /**
+   * True for empty / legacy (`read`, `write`, `public`) scope lists — those
+   * are accepted as full-access by the server and pre-flight should match.
+   */
+  fullAccess?: boolean;
+  /** Human hint when scopes can't be determined (PAT mode). */
+  note?: string;
+}
+
 export interface AuthStatus {
   authenticated: boolean;
   organization?: { name?: string; slug?: string; id?: number };
   user?: { email?: string; id?: number };
   token?: { expired: boolean; expiresInMinutes: number; hasRefresh: boolean };
+  scopes?: ScopeStatus;
 }
 
 export function getAuthStatus(runtime: Runtime): AuthStatus & { mode?: 'oauth' | 'pat' } {
@@ -214,6 +235,9 @@ export function getAuthStatus(runtime: Runtime): AuthStatus & { mode?: 'oauth' |
       authenticated: true,
       mode: 'pat',
       organization: { id: runtime.config.patOrganizationId },
+      scopes: {
+        note: 'PAT scopes are set at token creation and cannot be introspected from the CLI. Run `list_personal_access_tokens` (requires `users:read` or full-access) to view them.',
+      },
     };
   }
   const stored = runtime.tokenStore.load();
@@ -233,6 +257,20 @@ export function getAuthStatus(runtime: Runtime): AuthStatus & { mode?: 'oauth' |
       expiresInMinutes,
       hasRefresh: !!stored.tokens.refresh_token,
     },
+    scopes: scopesFromOauth(stored.tokens),
+  };
+}
+
+/**
+ * Parse the RFC 6749 `scope` string ("a b c") off a stored OAuth token.
+ * Empty / legacy values get flagged as full-access so callers can branch.
+ */
+function scopesFromOauth(tokens: TokenData): ScopeStatus {
+  const raw = typeof tokens.scope === 'string' ? tokens.scope.trim() : '';
+  const list = raw ? raw.split(/\s+/) : [];
+  return {
+    list,
+    fullAccess: isFullAccessScopeList(list),
   };
 }
 
