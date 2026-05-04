@@ -2,7 +2,7 @@
  * MCP Tools for Mediagraph - Combined from all tool modules
  */
 
-import { DryRunIntercept, type MediagraphClient } from '../api/client.js';
+import { DryRunIntercept, MediagraphApiError, type MediagraphClient } from '../api/client.js';
 import type { ToolContext, ToolResult, ToolDefinition, ToolModule } from './shared.js';
 import { errorResult } from './shared.js';
 
@@ -77,9 +77,11 @@ export async function handleTool(
   try {
     return await handler(args, context);
   } catch (error) {
-    // Dry-run signal must propagate up to the CLI dispatcher unchanged —
-    // wrapping it as a tool error would lose the request descriptor.
+    // Some errors must propagate up to the CLI dispatcher unchanged so its
+    // classifier can render them as structured envelopes (INSUFFICIENT_SCOPE,
+    // RATE_LIMITED, etc.) and so the dry-run path can return its descriptor.
     if (error instanceof DryRunIntercept) throw error;
+    if (error instanceof MediagraphApiError) throw error;
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     return errorResult(message);
   }

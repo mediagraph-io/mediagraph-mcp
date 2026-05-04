@@ -320,6 +320,7 @@ describe('api/client dry-run', () => {
       ok: true, status: 200, statusText: 'OK',
       headers: { get: (n: string) => n.toLowerCase() === 'content-type' ? 'application/json' : null },
       json: async () => ({ id: 1 }),
+      text: async () => JSON.stringify({ id: 1 }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -337,6 +338,7 @@ describe('api/client dry-run', () => {
       ok: true, status: 200, statusText: 'OK',
       headers: { get: (n: string) => n.toLowerCase() === 'content-type' ? 'application/json' : null },
       json: async () => ({ id: 1 }),
+      text: async () => JSON.stringify({ id: 1 }),
     });
     vi.stubGlobal('fetch', fetchMock);
     const client = new MediagraphClient({ getAccessToken: async () => 'oauth-tok' });
@@ -360,6 +362,7 @@ describe('api/client 429 / 503 / PAT-disabled handling', () => {
       ok: true, status: 200, statusText: 'OK',
       headers: { get: (n: string) => n.toLowerCase() === 'content-type' ? 'application/json' : null },
       json: async () => body,
+      text: async () => JSON.stringify(body),
     };
   }
 
@@ -455,6 +458,7 @@ describe('api/client 429 / 503 / PAT-disabled handling', () => {
         },
       },
       json: async () => ({ id: 6 }),
+      text: async () => JSON.stringify({ id: 6 }),
     });
     vi.stubGlobal('fetch', fetchMock);
 

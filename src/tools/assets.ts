@@ -187,6 +187,77 @@ COMMON SEARCH FIELDS:
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
     {
+      name: 'tag_asset_face',
+      description: `Manually tag a detected face crop on an image asset and index it into Rekognition for org-wide face matching.
+
+Workflow for "upload a headshot for a person tag":
+  1. Upload the headshot via upload_file (optionally with the person tag attached).
+  2. Call get_asset_face_taggings to get the face_id of the detected face crop.
+  3. Call tag_asset_face with the person tag's id (or a new name) + that face_id.
+
+After indexing, future uploads automatically run face matching against this person.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          face_id: { type: 'string', description: 'Detected face id from face_taggings (Rekognition face id)' },
+          tag_id: { type: 'number', description: 'Existing person tag id to associate (preferred when the tag already exists in a taxonomy)' },
+          name: { type: 'string', description: 'Create a new person tag with this name (alternative to tag_id)' },
+        },
+        required: ['id', 'face_id'],
+      },
+    },
+    {
+      name: 'search_asset_faces',
+      description: 'Run face search on an asset using the org-wide face index; matches detected faces to indexed person tags. Reindexes the asset on success.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'block_asset_face',
+      description: 'Block a detected face crop on an asset (creates a "Blocked Face" tag and excludes from future matching).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, face_id: { type: 'string' } },
+        required: ['id', 'face_id'],
+      },
+    },
+    {
+      name: 'ignore_asset_face_toggle',
+      description: 'Toggle the per-asset "ignore" state on a detected face id. Useful for hiding low-confidence detections without blocking the face globally.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, face_id: { type: 'string' } },
+        required: ['id', 'face_id'],
+      },
+    },
+    {
+      name: 'ignore_asset_unidentified_faces',
+      description: 'Hide all unidentified (unmatched) face crops on an asset.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'set_asset_custom_meta',
+      description: `Write to a custom meta field on an asset. The field's shape determines which value param to pass:
+
+  - free (free-text):     pass \`value\` (or \`text\`)
+  - select (single-pick): pass \`custom_meta_value_id\`
+  - multi  (multi-pick):  pass \`custom_meta_value_ids\` (array)
+
+Pass none of value/text/*_id to clear the field. The asset is reindexed on success.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          custom_meta_field_id: { type: ['number', 'string'], description: 'CustomMetaField id to write' },
+          value: { type: 'string', description: 'Free-text value (free fields)' },
+          text: { type: 'string', description: 'Alias for value (server accepts either)' },
+          custom_meta_value_id: { type: ['number', 'string'], description: 'Predefined value id (single-select fields)' },
+          custom_meta_value_ids: { type: 'array', items: { type: ['number', 'string'] }, description: 'Predefined value ids (multi-select fields)' },
+        },
+        required: ['id', 'custom_meta_field_id'],
+      },
+    },
+    {
       name: 'explain_asset_search',
       description: 'Super-admin diagnostic: show which Elasticsearch fields/terms matched a query for a given asset.',
       inputSchema: {
@@ -295,6 +366,29 @@ COMMON SEARCH FIELDS:
     },
     async detect_video_faces(args, { client }) {
       return successResult(await client.detectVideoFaces(args.id as number | string));
+    },
+    async tag_asset_face(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.tagAssetFace(id as number | string, rest as { face_id: string; tag_id?: number; name?: string }));
+    },
+    async search_asset_faces(args, { client }) {
+      return successResult(await client.searchAssetFaces(args.id as number | string));
+    },
+    async block_asset_face(args, { client }) {
+      return successResult(await client.blockAssetFace(args.id as number | string, args.face_id as string));
+    },
+    async ignore_asset_face_toggle(args, { client }) {
+      return successResult(await client.ignoreAssetFaceToggle(args.id as number | string, args.face_id as string));
+    },
+    async ignore_asset_unidentified_faces(args, { client }) {
+      return successResult(await client.ignoreAssetUnidentifiedFaces(args.id as number | string));
+    },
+    async set_asset_custom_meta(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.setAssetCustomMeta(
+        id as number | string,
+        rest as Parameters<typeof client.setAssetCustomMeta>[1],
+      ));
     },
     async explain_asset_search(args, { client }) {
       const { id, ...rest } = args;

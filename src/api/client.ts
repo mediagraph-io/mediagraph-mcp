@@ -326,8 +326,12 @@ export class MediagraphClient {
           return {} as T;
         }
 
-        const data = await response.json();
-        return data as T;
+        // Some endpoints (merge_into, etc.) return 200 with an empty body but
+        // an `application/json` content-type. Read text first so empty bodies
+        // resolve to `{}` instead of crashing in JSON.parse.
+        const text = await response.text();
+        if (!text) return {} as T;
+        return JSON.parse(text) as T;
       } catch (error) {
         lastError = error as Error;
 
@@ -488,6 +492,61 @@ export class MediagraphClient {
 
   async detectVideoFaces(id: number | string): Promise<unknown> {
     return this.request('POST', `/api/assets/${id}/detect_video_faces`);
+  }
+
+  /**
+   * Manually tag a detected face crop in an image asset. Pair with a tag_id
+   * for taxonomy-based people, or pass `name` to create a new person tag
+   * inline. Indexes the face into Rekognition for org-wide face matching.
+   */
+  async tagAssetFace(id: number | string, data: { face_id: string; tag_id?: number; name?: string }): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/tag_face`, { body: data });
+  }
+
+  /** Run face search on an indexed asset; matches against org's face index. */
+  async searchAssetFaces(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/search_faces`);
+  }
+
+  /** Block a detected face crop on an asset (creates a 'Blocked Face' tag). */
+  async blockAssetFace(id: number | string, faceId: string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/block_face`, { body: { face_id: faceId } });
+  }
+
+  /** Toggle ignore on a detected face id (per-asset hide). */
+  async ignoreAssetFaceToggle(id: number | string, faceId: string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/ignore_face_toggle`, { body: { face_id: faceId } });
+  }
+
+  /** Hide all unidentified faces on the asset. */
+  async ignoreAssetUnidentifiedFaces(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/ignore_unidentified_faces`);
+  }
+
+  /**
+   * Update a custom meta field value on an asset.
+   *
+   * Three field shapes:
+   *   - free: pass `value` (or `text`) — any string
+   *   - select (single): pass `custom_meta_value_id` — predefined value id
+   *   - multi: pass `custom_meta_value_ids` — array of predefined value ids
+   *
+   * Pass no values to clear the field. The asset is reindexed on success.
+   */
+  async setAssetCustomMeta(
+    id: number | string,
+    data: {
+      custom_meta_field_id: number | string;
+      value?: string;
+      text?: string;
+      custom_meta_value_id?: number | string;
+      custom_meta_value_ids?: Array<number | string>;
+    },
+  ): Promise<unknown> {
+    const { custom_meta_value_ids, ...rest } = data;
+    const body: Record<string, unknown> = { ...rest };
+    if (custom_meta_value_ids !== undefined) body.custom_meta_value_id = custom_meta_value_ids;
+    return this.request('PUT', `/api/assets/${id}/update_custom_meta`, { body });
   }
 
   async explainAssetSearch(id: number | string, params?: { q?: string; text_q?: string }): Promise<unknown> {
@@ -723,7 +782,7 @@ export class MediagraphClient {
     return this.request<Tag>('GET', `/api/tags/${id}`);
   }
 
-  async createTag(data: { name: string; parent_id?: number }): Promise<Tag> {
+  async createTag(data: Partial<Tag> & { name: string; parent_id?: number }): Promise<Tag> {
     return this.request<Tag>('POST', '/api/tags', { body: { tag: data } });
   }
 
@@ -743,8 +802,20 @@ export class MediagraphClient {
     return this.request<Tag>('PUT', `/api/tags/${id}/add_taxonomy`, { body: { taxonomy_id: taxonomyId } });
   }
 
-  async mergeTagInto(id: number | string, targetTagId: number): Promise<void> {
-    await this.request<void>('POST', `/api/tags/${id}/merge_into`, { body: { tag_2_id: targetTagId } });
+  /**
+   * Merge `id` into `targetTagId`. When `setSynonym` is true, the source tag
+   * is preserved as a synonym pointing at the target instead of being
+   * deleted — taggings still move to the target.
+   */
+  async mergeTagInto(id: number | string, targetTagId: number, setSynonym?: boolean): Promise<void> {
+    const body: Record<string, unknown> = { tag_2_id: targetTagId };
+    if (setSynonym) body.set_synonym = true;
+    await this.request<void>('POST', `/api/tags/${id}/merge_into`, { body });
+  }
+
+  /** Clear face-tagging state on a person tag and re-enqueue indexing. */
+  async resetTagFace(id: number | string): Promise<void> {
+    await this.request<void>('POST', `/api/tags/${id}/reset_face`);
   }
 
   async getTagEvents(params?: PaginationParams): Promise<unknown[]> {

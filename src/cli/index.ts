@@ -37,6 +37,7 @@ import { ArgParseError, helpFor, parseToolArgs } from './args.js';
 import { CliError, classify, exitCodeFor, emitError, failNow, type ErrorCode } from './errors.js';
 import { stripGlobalFlags, type GlobalFlags } from './global_flags.js';
 import { isPaginated, paginate } from './pagination.js';
+import { checkForUpdates, checkForUpdatesNow, printUpdateBannerIfTTY } from './update_check.js';
 import { waitForTerminal, WaitTimeout } from './wait.js';
 
 const HELP = `Mediagraph CLI / MCP server
@@ -47,6 +48,7 @@ Run \`mediagraph skill\` for the agent-targeted onboarding guide.
 
 Usage:
   mediagraph --version                    Print the package version
+  mediagraph update                       Force a fresh check for newer versions on npm (JSON)
   mediagraph skill                        Print the agent skill guide (start here)
   mediagraph serve                        Start the MCP server (stdio)
   mediagraph auth login                   OAuth-authorize with Mediagraph (default: full read-write)
@@ -82,7 +84,8 @@ Environment:
   MEDIAGRAPH_CLIENT_ID       OAuth client ID (default: bundled)
   MEDIAGRAPH_CLIENT_SECRET   OAuth client secret (confidential clients only)
   MEDIAGRAPH_REDIRECT_PORT   Local OAuth callback port (default: 52584)
-  MEDIAGRAPH_SYNC_ROOT       Override sync state directory`;
+  MEDIAGRAPH_SYNC_ROOT       Override sync state directory
+  MEDIAGRAPH_NO_UPDATE_CHECK Set to 1 to disable the daily update check`;
 
 interface Envelope {
   ok: boolean;
@@ -101,6 +104,10 @@ function emit(value: unknown): void {
 }
 
 export async function runCli(argv: string[]): Promise<void> {
+  // Synchronously consult the update cache + show a TTY-only banner. Triggers
+  // a background refresh when stale; never blocks the dispatcher.
+  printUpdateBannerIfTTY(checkForUpdates(readPackageVersion()));
+
   try {
     await dispatch(argv);
   } catch (e) {
@@ -120,6 +127,12 @@ async function dispatch(argv: string[]): Promise<void> {
 
   if (command === '--version' || command === '-v' || command === 'version') {
     process.stdout.write(`${readPackageVersion()}\n`);
+    return;
+  }
+
+  if (command === 'update' || command === 'check-update') {
+    const result = await checkForUpdatesNow(readPackageVersion());
+    emit(result);
     return;
   }
 
@@ -307,9 +320,11 @@ function writeOutput(
  * Resolve scope flags on `auth login`:
  *   --read-only            preset: every entity at :read
  *   --scope <CSV>          explicit list (entity or group keys; bare → :write)
- * Mutually exclusive — `--scope` wins if both are passed but we surface a
- * BAD_ARGS so the caller knows the read-only flag was silently overridden.
- * Returns undefined when no scope flag is given (use OAuth handler default).
+ *   (no flag)              default: every entity at :write (full read-write)
+ *
+ * The default emits entity-level scopes rather than legacy bare `write` —
+ * the server's scope check honors `read` as full-read but does not treat
+ * bare `write` as full-write. Entity-level is the modern, reliable shape.
  */
 function parseLoginScopeFlags(args: string[]): string[] | undefined {
   const readOnly = args.includes('--read-only');
@@ -332,7 +347,7 @@ function parseLoginScopeFlags(args: string[]): string[] | undefined {
     }
   }
   if (readOnly) return allEntityScopes('read');
-  return undefined;
+  return allEntityScopes('write');
 }
 
 async function runAuth(runtime: Runtime, command: string, rest: string[]): Promise<void> {

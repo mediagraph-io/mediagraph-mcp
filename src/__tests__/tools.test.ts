@@ -133,6 +133,13 @@ function createMockClient(overrides: Partial<MediagraphClient> = {}): Mediagraph
     listPersonalAccessTokens: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, per_page: 25 }),
     createPersonalAccessToken: vi.fn().mockResolvedValue({ id: 1, name: 'New Token', token: 'pat_abc123', created_at: '2024-01-01' }),
     deletePersonalAccessToken: vi.fn().mockResolvedValue(undefined),
+    resetTagFace: vi.fn().mockResolvedValue(undefined),
+    tagAssetFace: vi.fn().mockResolvedValue({ taggings: [{ id: 1, tag_id: 7, face_id: 'face-abc' }] }),
+    searchAssetFaces: vi.fn().mockResolvedValue({ id: 1, guid: 'abc' }),
+    blockAssetFace: vi.fn().mockResolvedValue({ taggings: [{ id: 2 }] }),
+    ignoreAssetFaceToggle: vi.fn().mockResolvedValue({ id: 1 }),
+    ignoreAssetUnidentifiedFaces: vi.fn().mockResolvedValue({ id: 1 }),
+    setAssetCustomMeta: vi.fn().mockResolvedValue({ id: 1, custom_meta: { '4': 'val' } }),
     ...overrides,
   } as unknown as MediagraphClient;
 }
@@ -459,6 +466,98 @@ describe('Tool Handlers', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Authentication failed');
+    });
+  });
+
+  describe('tag enrichment + synonyms', () => {
+    it('update_tag forwards every enrichment field', async () => {
+      const result = await handleTool('update_tag', {
+        id: 1,
+        description: 'A person',
+        sub_type: 'person',
+        link: 'https://wikipedia.org/wiki/X',
+        cms_id: 'TMS-9001',
+        collection_management_system: 'TMS',
+        artwork_inventory_number: 'INV-42',
+      }, { client: mockClient });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.updateTag).toHaveBeenCalledWith(1, expect.objectContaining({
+        description: 'A person',
+        sub_type: 'person',
+        link: 'https://wikipedia.org/wiki/X',
+        cms_id: 'TMS-9001',
+        collection_management_system: 'TMS',
+        artwork_inventory_number: 'INV-42',
+      }));
+    });
+
+    it('merge_tags passes set_synonym=true through', async () => {
+      const result = await handleTool('merge_tags', { id: 5, target_tag_id: 7, set_synonym: true }, { client: mockClient });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.mergeTagInto).toHaveBeenCalledWith(5, 7, true);
+    });
+
+    it('merge_tags omits set_synonym when not provided', async () => {
+      await handleTool('merge_tags', { id: 5, target_tag_id: 7 }, { client: mockClient });
+      expect(mockClient.mergeTagInto).toHaveBeenCalledWith(5, 7, undefined);
+    });
+
+    it('reset_tag_face dispatches', async () => {
+      const result = await handleTool('reset_tag_face', { id: 9 }, { client: mockClient });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.resetTagFace).toHaveBeenCalledWith(9);
+    });
+  });
+
+  describe('image face tagging', () => {
+    it('tag_asset_face forwards face_id + tag_id', async () => {
+      const result = await handleTool('tag_asset_face', { id: 12, face_id: 'face-abc', tag_id: 7 }, { client: mockClient });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.tagAssetFace).toHaveBeenCalledWith(12, { face_id: 'face-abc', tag_id: 7 });
+    });
+
+    it('tag_asset_face accepts name in lieu of tag_id', async () => {
+      await handleTool('tag_asset_face', { id: 12, face_id: 'face-abc', name: 'Jane Doe' }, { client: mockClient });
+      expect(mockClient.tagAssetFace).toHaveBeenCalledWith(12, { face_id: 'face-abc', name: 'Jane Doe' });
+    });
+
+    it('search_asset_faces dispatches', async () => {
+      await handleTool('search_asset_faces', { id: 12 }, { client: mockClient });
+      expect(mockClient.searchAssetFaces).toHaveBeenCalledWith(12);
+    });
+
+    it('block_asset_face passes face_id', async () => {
+      await handleTool('block_asset_face', { id: 12, face_id: 'face-bad' }, { client: mockClient });
+      expect(mockClient.blockAssetFace).toHaveBeenCalledWith(12, 'face-bad');
+    });
+  });
+
+  describe('custom meta write', () => {
+    it('set_asset_custom_meta with free-text value', async () => {
+      await handleTool('set_asset_custom_meta', {
+        id: 1, custom_meta_field_id: 4, value: 'sunset',
+      }, { client: mockClient });
+      expect(mockClient.setAssetCustomMeta).toHaveBeenCalledWith(1, {
+        custom_meta_field_id: 4, value: 'sunset',
+      });
+    });
+
+    it('set_asset_custom_meta with single-select value id', async () => {
+      await handleTool('set_asset_custom_meta', {
+        id: 1, custom_meta_field_id: 4, custom_meta_value_id: 99,
+      }, { client: mockClient });
+      expect(mockClient.setAssetCustomMeta).toHaveBeenCalledWith(1, {
+        custom_meta_field_id: 4, custom_meta_value_id: 99,
+      });
+    });
+
+    it('set_asset_custom_meta with multi-select array', async () => {
+      await handleTool('set_asset_custom_meta', {
+        id: 1, custom_meta_field_id: 4, custom_meta_value_ids: [99, 100],
+      }, { client: mockClient });
+      expect(mockClient.setAssetCustomMeta).toHaveBeenCalledWith(1, {
+        custom_meta_field_id: 4, custom_meta_value_ids: [99, 100],
+      });
     });
   });
 });

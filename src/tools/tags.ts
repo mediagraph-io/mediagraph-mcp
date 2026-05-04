@@ -4,6 +4,62 @@
 
 import { idParam, paginationParams, successResult, type ToolModule } from './shared.js';
 
+/**
+ * Full enrichment surface accepted by both POST /api/tags and PUT /api/tags/:id.
+ * Mirrors the controller's strong-params (TagsController#tag_params).
+ */
+const tagEnrichmentSchema = {
+  name: { type: 'string' as const },
+  description: { type: 'string' as const, description: 'Free-text description of the tag' },
+  sub_type: {
+    type: 'string' as const,
+    enum: ['keyword', 'event', 'person'],
+    description: 'Tag type. `event` unlocks date_start/end + location_*; `person` unlocks face-tagging.',
+  },
+  link: { type: 'string' as const, description: 'External URL to attach to the tag (Wikipedia, Wikidata, internal CMS, etc.)' },
+  list: { type: 'string' as const, enum: ['searchable', 'visible', 'blocked'], description: 'Tag visibility list' },
+  content: { type: 'string' as const, description: 'Long-form content / notes' },
+
+  // Event sub_type
+  date_start: { type: 'string' as const, description: 'Event start (ISO 8601). For sub_type=event.' },
+  date_end: { type: 'string' as const, description: 'Event end (ISO 8601). For sub_type=event.' },
+  location_country: { type: 'string' as const },
+  location_country_code: { type: 'string' as const },
+  location_state: { type: 'string' as const },
+  location_city: { type: 'string' as const },
+  location_name: { type: 'string' as const },
+  featured_organization_name: { type: 'string' as const },
+
+  // External-system identifiers (the "link to other data sources" surface)
+  cms_id: { type: 'string' as const, description: 'External CMS / data-source identifier' },
+  collection_management_system: { type: 'string' as const, description: 'Name of the source CMS (e.g. "TMS", "EmbARK")' },
+  gtin: { type: 'string' as const, description: 'Global Trade Item Number' },
+  sku: { type: 'string' as const, description: 'SKU' },
+
+  // Artwork enrichment
+  artwork_title: { type: 'string' as const },
+  artwork_creator: { type: 'string' as const },
+  artwork_creator_id: { type: 'number' as const },
+  artwork_date_created: { type: 'string' as const },
+  artwork_circa_date_created: { type: 'string' as const },
+  artwork_medium: { type: 'string' as const },
+  artwork_style_period: { type: 'string' as const },
+  artwork_source: { type: 'string' as const },
+  artwork_source_inventory_url: { type: 'string' as const, description: 'Link to the source inventory record' },
+  artwork_inventory_number: { type: 'string' as const },
+  artwork_copyright_notice: { type: 'string' as const },
+  artwork_copyright_owner_id: { type: 'number' as const },
+  artwork_licensor_id: { type: 'number' as const },
+  artwork_licensor_name: { type: 'string' as const },
+  artwork_physical_description: { type: 'string' as const },
+  artwork_content_description: { type: 'string' as const },
+  artwork_contribution_description: { type: 'string' as const },
+
+  // Related tags + face poster
+  related_tag_names: { type: 'array' as const, items: { type: 'string' as const }, description: 'Names of related tags (loose graph)' },
+  poster_image_guid: { type: 'string' as const, description: 'Asset guid to use as the tag thumbnail' },
+};
+
 export const tagTools: ToolModule = {
   definitions: [
     // Tags
@@ -36,19 +92,26 @@ export const tagTools: ToolModule = {
     },
     {
       name: 'create_tag',
-      description: 'Create a new tag',
+      description: 'Create a new tag. Supports the full enrichment surface (description, sub_type, link, event fields, artwork fields, external-system identifiers).',
       inputSchema: {
         type: 'object',
-        properties: { name: { type: 'string' }, parent_id: { type: 'number' } },
+        properties: { ...tagEnrichmentSchema, parent_id: { type: 'number' } },
         required: ['name'],
       },
     },
     {
       name: 'update_tag',
-      description: 'Update a tag',
+      description: 'Update a tag — accepts every enrichment field (description, sub_type, link, event fields, artwork fields, external-system links, synonym graph).',
       inputSchema: {
         type: 'object',
-        properties: { id: idParam, name: { type: 'string' } },
+        properties: {
+          id: idParam,
+          ...tagEnrichmentSchema,
+          // Synonym graph (server-side: requires admin to set lead_tag_*/new_synonym_names)
+          lead_tag_id: { type: 'number', description: 'Make this tag a synonym of lead_tag_id (admin only)' },
+          lead_tag_name: { type: 'string', description: 'Lead tag by name (admin only)' },
+          new_synonym_names: { type: 'array', items: { type: 'string' }, description: 'Names of new tags to create as synonyms of this tag (admin only)' },
+        },
         required: ['id'],
       },
     },
@@ -59,12 +122,21 @@ export const tagTools: ToolModule = {
     },
     {
       name: 'merge_tags',
-      description: 'Merge one tag into another',
+      description: 'Merge one tag into another. With set_synonym=true, the source tag is preserved as a synonym of the target instead of being deleted.',
       inputSchema: {
         type: 'object',
-        properties: { id: idParam, target_tag_id: { type: 'number' } },
+        properties: {
+          id: idParam,
+          target_tag_id: { type: 'number' },
+          set_synonym: { type: 'boolean', description: 'Preserve source as a synonym of target rather than deleting it' },
+        },
         required: ['id', 'target_tag_id'],
       },
+    },
+    {
+      name: 'reset_tag_face',
+      description: 'Clear face-tagging state on a person tag and re-enqueue Rekognition indexing.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
 
     // Taggings
@@ -181,7 +253,7 @@ export const tagTools: ToolModule = {
       return successResult(await client.getTag(args.id as number | string));
     },
     async create_tag(args, { client }) {
-      return successResult(await client.createTag(args as { name: string; parent_id?: number }));
+      return successResult(await client.createTag(args as Parameters<typeof client.createTag>[0]));
     },
     async update_tag(args, { client }) {
       const { id, ...data } = args;
@@ -192,7 +264,15 @@ export const tagTools: ToolModule = {
       return successResult({ success: true });
     },
     async merge_tags(args, { client }) {
-      await client.mergeTagInto(args.id as number | string, args.target_tag_id as number);
+      await client.mergeTagInto(
+        args.id as number | string,
+        args.target_tag_id as number,
+        args.set_synonym as boolean | undefined,
+      );
+      return successResult({ success: true });
+    },
+    async reset_tag_face(args, { client }) {
+      await client.resetTagFace(args.id as number | string);
       return successResult({ success: true });
     },
 

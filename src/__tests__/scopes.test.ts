@@ -242,6 +242,7 @@ describe('client 403 body parsing — entity-level required', () => {
       statusText: status === 403 ? 'Forbidden' : 'OK',
       headers: { get: (n: string) => (/^content-type$/i.test(n) ? 'application/json' : null) },
       json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
     };
   }
 

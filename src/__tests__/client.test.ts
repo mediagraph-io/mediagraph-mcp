@@ -20,6 +20,7 @@ function createMockResponse(data: unknown, options: { status?: number; ok?: bool
       },
     },
     json: () => Promise.resolve(data),
+    text: () => Promise.resolve(JSON.stringify(data)),
   };
 }
 
@@ -181,6 +182,40 @@ describe('MediagraphClient', () => {
         expect.stringContaining('/api/assets/abc123'),
         expect.any(Object),
       );
+    });
+  });
+
+  describe('setAssetCustomMeta', () => {
+    it('maps custom_meta_value_ids[] to the server param custom_meta_value_id', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ id: 1 }));
+      await client.setAssetCustomMeta(1, { custom_meta_field_id: 4, custom_meta_value_ids: [99, 100] });
+      const [, init] = mockFetch.mock.calls[0];
+      const body = JSON.parse((init as { body: string }).body);
+      expect(body).toEqual({ custom_meta_field_id: 4, custom_meta_value_id: [99, 100] });
+    });
+
+    it('passes free-text value through unchanged', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ id: 1 }));
+      await client.setAssetCustomMeta(1, { custom_meta_field_id: 4, value: 'sunset' });
+      const [, init] = mockFetch.mock.calls[0];
+      const body = JSON.parse((init as { body: string }).body);
+      expect(body).toEqual({ custom_meta_field_id: 4, value: 'sunset' });
+    });
+  });
+
+  describe('mergeTagInto', () => {
+    it('omits set_synonym when not requested', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({}));
+      await client.mergeTagInto(5, 7);
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse((init as { body: string }).body)).toEqual({ tag_2_id: 7 });
+    });
+
+    it('includes set_synonym=true when passed', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({}));
+      await client.mergeTagInto(5, 7, true);
+      const [, init] = mockFetch.mock.calls[0];
+      expect(JSON.parse((init as { body: string }).body)).toEqual({ tag_2_id: 7, set_synonym: true });
     });
   });
 

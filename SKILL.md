@@ -72,6 +72,8 @@ Other env vars:
 | `MEDIAGRAPH_CLIENT_SECRET` | Confidential client secret (rare) |
 | `MEDIAGRAPH_REDIRECT_PORT` | Local OAuth callback port (default 52584) |
 | `MEDIAGRAPH_SYNC_ROOT` | Override sync state directory |
+| `MEDIAGRAPH_CONFIG_DIR` | Override config dir (default `~/.mediagraph`) — used for the update-check cache |
+| `MEDIAGRAPH_NO_UPDATE_CHECK` | `1` to disable the daily npm-registry update check + banner |
 
 ## Invocation contract
 
@@ -129,6 +131,7 @@ Top-level commands:
 | `skill` | Print this agent guide |
 | `serve` | Start MCP server (stdio). Used by Claude Desktop, etc. |
 | `auth login [--read-only \| --scope <CSV>]` / `auth logout` / `auth status` | OAuth lifecycle (default = full read-write) |
+| `update` | Force a fresh npm-registry check; emits `{current, latest, updateAvailable, installCommand}` JSON |
 | `list-tools` | Print every tool name, description, required + optional flags |
 | `search-tools <query>` | Ranked keyword search over the tool registry |
 | `sync ...` | Continuous folder sync (see below) |
