@@ -139,6 +139,124 @@ export const tagTools: ToolModule = {
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
 
+    // ── Tag → taxonomy graph ────────────────────────────────────────────
+    {
+      name: 'add_tag_to_taxonomy',
+      description: 'Add an existing tag to a taxonomy as a taxonomy_tag.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, taxonomy_id: { type: 'number' } },
+        required: ['id', 'taxonomy_id'],
+      },
+    },
+    {
+      name: 'remove_tag_taxonomies',
+      description: 'Detach a tag from all taxonomies it belongs to.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'bulk_find_tags',
+      description: 'Find or stub many tags by name in a single call. Returns existing tags where matched, otherwise unsaved Tag-shaped records the agent can persist.',
+      inputSchema: {
+        type: 'object',
+        properties: { names: { type: 'array', items: { type: 'string' } } },
+        required: ['names'],
+      },
+    },
+    {
+      name: 'bulk_update_tags',
+      description: 'Apply a single change to many tags (set list, attach/detach taxonomy).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tag_ids: { type: 'array', items: { type: 'number' } },
+          list: { type: 'string', enum: ['searchable', 'visible', 'blocked'] },
+          add_taxonomy: { type: 'boolean' },
+          remove_taxonomy: { type: 'boolean' },
+        },
+        required: ['tag_ids'],
+      },
+    },
+    {
+      name: 'bulk_delete_tags',
+      description: 'Delete many tags by id in a single call.',
+      inputSchema: {
+        type: 'object',
+        properties: { ids: { type: 'array', items: { type: 'number' } } },
+        required: ['ids'],
+      },
+    },
+    {
+      name: 'get_tag_events',
+      description: 'List recent tag activity events for the org. Optionally filter by year/month.',
+      inputSchema: {
+        type: 'object',
+        properties: { ...paginationParams, year: { type: 'number' }, month: { type: 'number' } },
+        required: [],
+      },
+    },
+    {
+      name: 'get_recent_tag_events',
+      description: 'Top 10 most recent tag activity events (no pagination).',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
+
+    // ── Tag → face linkage ──────────────────────────────────────────────
+    {
+      name: 'get_tag_associated_faces',
+      description: 'List the face crops currently associated with a person tag (across the org).',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'set_tag_face_membership',
+      description: 'Associate a person tag with a user (by email). The user becomes the canonical "face" for the tag — useful for faceless tags that need to point to a real person.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, email: { type: 'string' } },
+        required: ['id', 'email'],
+      },
+    },
+    {
+      name: 'remove_tag_face_membership',
+      description: 'Remove the user-membership association from a person tag.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'set_tag_face_creator_tag',
+      description: 'Link a person tag to a creator tag by name. Photos created by that creator gain the linked person tag automatically.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, name: { type: 'string', description: 'Creator tag name' } },
+        required: ['id', 'name'],
+      },
+    },
+    {
+      name: 'remove_tag_face_creator_tag',
+      description: 'Unlink the creator-tag association from a person tag.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+
+    // ── Tagging-level face actions ─────────────────────────────────────
+    {
+      name: 'set_main_face_for_tagging',
+      description: 'Promote a tagging to the canonical face for its tag. Used after tag_asset_face to pick which crop represents the person.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'associate_tagging_with_face',
+      description: 'Associate an existing tagging with a Rekognition face id (link tagging → detected face crop).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, face_id: { type: 'string' } },
+        required: ['id', 'face_id'],
+      },
+    },
+    {
+      name: 'disassociate_tagging_with_face',
+      description: 'Remove the face-crop association from a tagging.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+
     // Taggings
     {
       name: 'get_tagging',
@@ -202,6 +320,20 @@ export const tagTools: ToolModule = {
       },
     },
     {
+      name: 'update_taxonomy',
+      description: 'Update a taxonomy (name, description, etc.).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, name: { type: 'string' }, description: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_taxonomy',
+      description: 'Delete a taxonomy. Tags inside it are detached, not deleted.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
       name: 'list_taxonomy_tags',
       description: 'List tags within a taxonomy',
       inputSchema: {
@@ -211,12 +343,56 @@ export const tagTools: ToolModule = {
       },
     },
     {
+      name: 'get_taxonomy_tags_tree',
+      description: 'Hierarchical tree view of all taxonomy_tags within a taxonomy (parent → children).',
+      inputSchema: { type: 'object', properties: { taxonomy_id: idParam }, required: ['taxonomy_id'] },
+    },
+    {
+      name: 'get_taxonomy_tags_visible_asset_counts',
+      description: 'Count assets visible-to-current-user under each taxonomy_tag id (for displaying counts in a tree view).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taxonomy_id: idParam,
+          taxonomy_tag_ids: { type: 'array', items: { type: 'number' } },
+        },
+        required: ['taxonomy_id', 'taxonomy_tag_ids'],
+      },
+    },
+    {
+      name: 'bulk_find_taxonomy_tags',
+      description: 'Find or stub many taxonomy_tags by name in a single call (top-level — searches across taxonomies).',
+      inputSchema: {
+        type: 'object',
+        properties: { names: { type: 'array', items: { type: 'string' } } },
+        required: ['names'],
+      },
+    },
+    {
       name: 'create_taxonomy_tag',
       description: 'Create a tag within a taxonomy',
       inputSchema: {
         type: 'object',
         properties: { taxonomy_id: idParam, name: { type: 'string' }, parent_id: { type: 'number' } },
         required: ['taxonomy_id', 'name'],
+      },
+    },
+    {
+      name: 'update_taxonomy_tag',
+      description: 'Update a tag inside a taxonomy.',
+      inputSchema: {
+        type: 'object',
+        properties: { taxonomy_id: idParam, id: idParam, name: { type: 'string' }, parent_id: { type: 'number' } },
+        required: ['taxonomy_id', 'id'],
+      },
+    },
+    {
+      name: 'delete_taxonomy_tag',
+      description: 'Delete a tag from a taxonomy.',
+      inputSchema: {
+        type: 'object',
+        properties: { taxonomy_id: idParam, id: idParam },
+        required: ['taxonomy_id', 'id'],
       },
     },
 
@@ -323,6 +499,87 @@ export const tagTools: ToolModule = {
     },
     async create_creator_tag(args, { client }) {
       return successResult(await client.createCreatorTag(args as { name: string }));
+    },
+
+    // ── Tag → taxonomy graph ─────────────────────────────────────────────
+    async add_tag_to_taxonomy(args, { client }) {
+      return successResult(await client.addTagToTaxonomy(args.id as number | string, args.taxonomy_id as number));
+    },
+    async remove_tag_taxonomies(args, { client }) {
+      return successResult(await client.removeTagTaxonomies(args.id as number | string));
+    },
+    async bulk_find_tags(args, { client }) {
+      return successResult(await client.bulkFindTags(args.names as string[]));
+    },
+    async bulk_update_tags(args, { client }) {
+      return successResult(await client.bulkUpdateTags(args as Parameters<typeof client.bulkUpdateTags>[0]));
+    },
+    async bulk_delete_tags(args, { client }) {
+      return successResult(await client.bulkDestroyTags(args.ids as number[]));
+    },
+    async get_tag_events(args, { client }) {
+      return successResult(await client.getTagEvents(args));
+    },
+    async get_recent_tag_events(_args, { client }) {
+      return successResult(await client.getRecentTagEvents());
+    },
+
+    // ── Tag → face linkage ──────────────────────────────────────────────
+    async get_tag_associated_faces(args, { client }) {
+      return successResult(await client.getTagAssociatedFaces(args.id as number | string));
+    },
+    async set_tag_face_membership(args, { client }) {
+      return successResult(await client.setTagFaceMembership(args.id as number | string, args.email as string));
+    },
+    async remove_tag_face_membership(args, { client }) {
+      return successResult(await client.removeTagFaceMembership(args.id as number | string));
+    },
+    async set_tag_face_creator_tag(args, { client }) {
+      return successResult(await client.setTagFaceCreatorTag(args.id as number | string, args.name as string));
+    },
+    async remove_tag_face_creator_tag(args, { client }) {
+      return successResult(await client.removeTagFaceCreatorTag(args.id as number | string));
+    },
+
+    // ── Tagging-level face actions ──────────────────────────────────────
+    async set_main_face_for_tagging(args, { client }) {
+      return successResult(await client.setMainFaceForTagging(args.id as number | string));
+    },
+    async associate_tagging_with_face(args, { client }) {
+      return successResult(await client.associateTaggingWithFace(args.id as number | string, args.face_id as string));
+    },
+    async disassociate_tagging_with_face(args, { client }) {
+      return successResult(await client.disassociateTaggingWithFace(args.id as number | string));
+    },
+
+    // ── Taxonomy gaps ───────────────────────────────────────────────────
+    async update_taxonomy(args, { client }) {
+      const { id, ...data } = args;
+      return successResult(await client.updateTaxonomy(id as number | string, data));
+    },
+    async delete_taxonomy(args, { client }) {
+      await client.deleteTaxonomy(args.id as number | string);
+      return successResult({ success: true });
+    },
+    async get_taxonomy_tags_tree(args, { client }) {
+      return successResult(await client.getTaxonomyTagsTree(args.taxonomy_id as number | string));
+    },
+    async get_taxonomy_tags_visible_asset_counts(args, { client }) {
+      return successResult(await client.getTaxonomyTagsVisibleAssetCounts(
+        args.taxonomy_id as number | string,
+        args.taxonomy_tag_ids as number[],
+      ));
+    },
+    async bulk_find_taxonomy_tags(args, { client }) {
+      return successResult(await client.bulkFindTaxonomyTags(args.names as string[]));
+    },
+    async update_taxonomy_tag(args, { client }) {
+      const { taxonomy_id, id, ...data } = args;
+      return successResult(await client.updateTaxonomyTag(taxonomy_id as number | string, id as number | string, data));
+    },
+    async delete_taxonomy_tag(args, { client }) {
+      await client.deleteTaxonomyTag(args.taxonomy_id as number | string, args.id as number | string);
+      return successResult({ success: true });
     },
   },
 };

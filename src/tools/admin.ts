@@ -13,6 +13,11 @@ export const adminTools: ToolModule = {
       inputSchema: { type: 'object', properties: { ...paginationParams, q: { type: 'string', description: 'Search by name or invite domain' } }, required: [] },
     },
     {
+      name: 'get_user_group',
+      description: 'Get a user group by id (members + permissions).',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
       name: 'create_user_group',
       description: 'Create a user group',
       inputSchema: {
@@ -20,6 +25,20 @@ export const adminTools: ToolModule = {
         properties: { name: { type: 'string' }, description: { type: 'string' } },
         required: ['name'],
       },
+    },
+    {
+      name: 'update_user_group',
+      description: 'Update a user group (name, description, etc.).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, name: { type: 'string' }, description: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_user_group',
+      description: 'Delete a user group. Members are not deleted.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
 
     // Invites
@@ -58,6 +77,90 @@ export const adminTools: ToolModule = {
       name: 'resend_invite',
       description: 'Resend an invite email',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'find_invite',
+      description: 'Look up an invite by token (for the public invite-acceptance flow).',
+      inputSchema: {
+        type: 'object',
+        properties: { token: { type: 'string' } },
+        required: ['token'],
+      },
+    },
+    {
+      name: 'check_invite_email',
+      description: 'Check whether a given email is a valid recipient for a new invite (already has account, already in org, etc.).',
+      inputSchema: {
+        type: 'object',
+        properties: { email: { type: 'string' } },
+        required: ['email'],
+      },
+    },
+    {
+      name: 'get_available_invite_role_levels',
+      description: 'Return the list of role_level values that the current user is allowed to grant in an invite. Helps prevent BAD_ARGS at create time.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'accept_invite',
+      description: 'Accept an invite using its email-link token (public flow — distinct from `accept_my_invite` which uses the profile-scoped invite list for an authenticated user).',
+      inputSchema: {
+        type: 'object',
+        properties: { token: { type: 'string' } },
+        required: ['token'],
+      },
+    },
+
+    // Memberships admin (find / search / status)
+    {
+      name: 'find_membership',
+      description: 'Find a single membership in the current org by username OR user_id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          username: { type: 'string' },
+          user_id: { type: ['number', 'string'] },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'search_memberships',
+      description: 'Search memberships within a comment context (collection / lightbox) — used for assignee pickers and @-mention lookups in commenting flows.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          q: { type: 'string', description: 'Prefix-match on name / username / email' },
+          commentable_type: { type: 'string', enum: ['Collection', 'Lightbox'] },
+          commentable_id: { type: ['number', 'string'] },
+          ...paginationParams,
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'update_membership_status',
+      description: 'Update the AASM status of a membership (e.g. activate, suspend). Different from `update_membership` which patches role_level / preferences.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          status: { type: 'string', description: 'Target AASM state' },
+        },
+        required: ['id', 'status'],
+      },
+    },
+
+    // Membership Requests
+    {
+      name: 'list_membership_requests',
+      description: 'List pending requests from users asking to join the current org.',
+      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+    },
+    {
+      name: 'get_pending_membership_requests_count',
+      description: 'Count of pending membership requests (for badging admin dashboards).',
+      inputSchema: { type: 'object', properties: {}, required: [] },
     },
 
     // Filter Groups
@@ -214,6 +317,72 @@ export const adminTools: ToolModule = {
       description: 'Get contribution details',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
     },
+    {
+      name: 'create_contribution',
+      description: 'Create a new contribution portal (named upload link tied to a collection / lightbox / folder).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          asset_group_id: { type: 'number', description: 'Destination collection / lightbox / folder' },
+          enabled: { type: 'boolean' },
+          require_login: { type: 'boolean' },
+          allow_anonymous: { type: 'boolean' },
+          message: { type: 'string' },
+        },
+        required: ['name'],
+      },
+    },
+    {
+      name: 'update_contribution',
+      description: 'Update a contribution portal.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          name: { type: 'string' },
+          enabled: { type: 'boolean' },
+          require_login: { type: 'boolean' },
+          allow_anonymous: { type: 'boolean' },
+          message: { type: 'string' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_contribution',
+      description: 'Delete a contribution portal.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'find_contribution',
+      description: 'Find a contribution by slug.',
+      inputSchema: {
+        type: 'object',
+        properties: { slug: { type: 'string' } },
+        required: ['slug'],
+      },
+    },
+    {
+      name: 'list_featured_contributions',
+      description: 'List featured contribution portals (those highlighted in the org UI).',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'list_group_contributions',
+      description: 'List contributions tied to a collection / lightbox / folder.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'list_lightbox_contributions',
+      description: 'List contributions tied to lightboxes.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'list_link_contributions',
+      description: 'List standalone (link-only) contributions.',
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    },
 
     // Personal Access Tokens
     {
@@ -310,8 +479,19 @@ export const adminTools: ToolModule = {
     async list_user_groups(args, { client }) {
       return successResult(await client.listUserGroups(args));
     },
+    async get_user_group(args, { client }) {
+      return successResult(await client.getUserGroup(args.id as number | string));
+    },
     async create_user_group(args, { client }) {
       return successResult(await client.createUserGroup(args as { name: string; description?: string }));
+    },
+    async update_user_group(args, { client }) {
+      const { id, ...data } = args;
+      return successResult(await client.updateUserGroup(id as number | string, data));
+    },
+    async delete_user_group(args, { client }) {
+      await client.deleteUserGroup(args.id as number | string);
+      return successResult({ success: true });
     },
 
     // Invites
@@ -327,6 +507,37 @@ export const adminTools: ToolModule = {
     },
     async resend_invite(args, { client }) {
       return successResult(await client.resendInvite(args.id as number | string));
+    },
+    async find_invite(args, { client }) {
+      return successResult(await client.findInvite({ token: args.token as string }));
+    },
+    async check_invite_email(args, { client }) {
+      return successResult(await client.checkInviteEmail(args.email as string));
+    },
+    async get_available_invite_role_levels(_args, { client }) {
+      return successResult(await client.getAvailableRoleLevels());
+    },
+    async accept_invite(args, { client }) {
+      return successResult(await client.acceptInvite(args.token as string));
+    },
+
+    // Memberships admin
+    async find_membership(args, { client }) {
+      return successResult(await client.findMembership(args as { username?: string; user_id?: number | string }));
+    },
+    async search_memberships(args, { client }) {
+      return successResult(await client.searchMemberships(args as Parameters<typeof client.searchMemberships>[0]));
+    },
+    async update_membership_status(args, { client }) {
+      return successResult(await client.updateMembershipStatus(args.id as number | string, args.status as string));
+    },
+
+    // Membership Requests
+    async list_membership_requests(args, { client }) {
+      return successResult(await client.listMembershipRequests(args));
+    },
+    async get_pending_membership_requests_count(_args, { client }) {
+      return successResult(await client.getMembershipRequestsPendingCount());
     },
 
     // Filter Groups
@@ -394,6 +605,32 @@ export const adminTools: ToolModule = {
     },
 
     // Contributions
+    async create_contribution(args, { client }) {
+      return successResult(await client.createContribution(args as Parameters<typeof client.createContribution>[0]));
+    },
+    async update_contribution(args, { client }) {
+      const { id, ...data } = args;
+      return successResult(await client.updateContribution(id as number | string, data));
+    },
+    async delete_contribution(args, { client }) {
+      await client.deleteContribution(args.id as number | string);
+      return successResult({ success: true });
+    },
+    async find_contribution(args, { client }) {
+      return successResult(await client.findContribution({ slug: args.slug as string }));
+    },
+    async list_featured_contributions(_args, { client }) {
+      return successResult(await client.getFeaturedContributions());
+    },
+    async list_group_contributions(_args, { client }) {
+      return successResult(await client.getContributionGroup());
+    },
+    async list_lightbox_contributions(_args, { client }) {
+      return successResult(await client.getContributionLightbox());
+    },
+    async list_link_contributions(_args, { client }) {
+      return successResult(await client.getContributionLink());
+    },
     async list_contributions(args, { client }) {
       return successResult(await client.listContributions(args));
     },

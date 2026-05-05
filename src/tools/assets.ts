@@ -315,6 +315,246 @@ Pass none of value/text/*_id to clear the field. The asset is reindexed on succe
       description: 'Get popular assets',
       inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
     },
+
+    // ── Bulk asset operations ────────────────────────────────────────────
+    {
+      name: 'bulk_edit_assets',
+      description: 'Update fields on many assets in a single call. Pass an `updates` object with the same field names as `update_asset` (title, description, alt_text, caption, credit, copyright, etc.).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_ids: { type: 'array', items: { type: 'number' } },
+          updates: { type: 'object', description: 'Field → new value map (mirrors update_asset)' },
+        },
+        required: ['asset_ids', 'updates'],
+      },
+    },
+    {
+      name: 'bulk_add_tags_to_assets',
+      description: 'Add the same tag names to many assets at once.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_ids: { type: 'array', items: { type: 'number' } },
+          tag_names: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['asset_ids', 'tag_names'],
+      },
+    },
+    {
+      name: 'bulk_remove_tags_from_assets',
+      description: 'Remove the same tag names from many assets at once.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_ids: { type: 'array', items: { type: 'number' } },
+          tag_names: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['asset_ids', 'tag_names'],
+      },
+    },
+    {
+      name: 'bulk_set_asset_rights_package',
+      description: 'Set (or clear with null) the rights package on many assets in one call.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_ids: { type: 'array', items: { type: 'number' } },
+          rights_package_id: { type: ['number', 'null'] },
+        },
+        required: ['asset_ids'],
+      },
+    },
+    {
+      name: 'bulk_set_asset_creator_tag',
+      description: 'Set (or clear with null) the creator tag on many assets in one call.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_ids: { type: 'array', items: { type: 'number' } },
+          creator_tag_id: { type: ['number', 'null'] },
+        },
+        required: ['asset_ids'],
+      },
+    },
+    {
+      name: 'remove_assets_from_group',
+      description: 'Remove many assets from a collection / lightbox / storage folder at once.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_ids: { type: 'array', items: { type: 'number' } },
+          asset_group_id: { type: 'number', description: 'Collection / Lightbox / StorageFolder id' },
+        },
+        required: ['asset_ids', 'asset_group_id'],
+      },
+    },
+
+    // ── Asset enrichment / AI / lifecycle ───────────────────────────────
+    {
+      name: 'auto_tag_asset',
+      description: 'Run Rekognition / Vision auto-tagging on a single asset. Existing auto-tags are preserved; new ones are appended.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'remove_asset_auto_tag',
+      description: 'Dismiss a specific auto-tag from this asset (does not delete the auto-tag globally).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, auto_tag_id: { type: 'number' } },
+        required: ['id', 'auto_tag_id'],
+      },
+    },
+    {
+      name: 'generate_asset_alt_text',
+      description: 'Generate accessibility alt text for an asset using AI; saves to the alt_text field.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'run_asset_ai',
+      description: 'Invoke an AI-enabled custom meta field action on an asset (e.g., LLM-driven extraction, classification, or description).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, custom_meta_field_id: { type: 'number' } },
+        required: ['id', 'custom_meta_field_id'],
+      },
+    },
+    {
+      name: 'clear_asset_nsfw',
+      description: 'Mark an NSFW detection as a false positive on an asset; clears the moderation flag and re-indexes.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'restore_asset',
+      description: 'Restore a trashed asset (undo delete_asset).',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'get_asset_meta',
+      description: 'Get extracted EXIF / IPTC / XMP / file metadata for an asset.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'get_asset_content',
+      description: 'Get extracted text content for a document asset (PDF/DOCX/etc.).',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'get_asset_ocr_content',
+      description: 'Get OCR-extracted text from an image asset.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'update_asset_description',
+      description: 'Patch only the description field on an asset (lighter than update_asset; does not touch other fields).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, description: { type: 'string' } },
+        required: ['id', 'description'],
+      },
+    },
+
+    // ── Search-driven asset reads ────────────────────────────────────────
+    {
+      name: 'get_selected_assets',
+      description: 'Fetch full asset records for an explicit ID list in one call. Use after `search_assets` returned a set of IDs and you want full attributes without N round-trips.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          ids: { type: 'array', items: { type: 'number' }, description: 'Asset ids to hydrate' },
+          aggregates_only: { type: 'boolean', description: 'Return only aggregations, not full assets' },
+        },
+        required: ['ids'],
+      },
+    },
+    {
+      name: 'get_assets_updated_since_last_sync',
+      description: 'Sync helper: returns asset ids that changed since `last_sync_at` (or since the server-tracked last_external_sync_at if omitted). Useful for export/mirror jobs.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          last_sync_at: { type: ['string', 'number'], description: 'ISO timestamp or unix seconds. Omit to use server-tracked value.' },
+          any_user: { type: 'boolean', description: 'Include assets from any user (admin only).' },
+          created_via: { type: 'string', description: 'Filter by `created_via` source (e.g. "lightroom", "api").' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'get_asset_event_log',
+      description: 'Audit trail for an asset: every version + who did what, paginated.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, ...paginationParams },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'get_asset_added_by',
+      description: 'Find which user added a given asset to a given asset_group (collection / lightbox / folder).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, asset_group_id: { type: 'number' } },
+        required: ['id', 'asset_group_id'],
+      },
+    },
+
+    // ── Asset versioning + video editing ─────────────────────────────────
+    {
+      name: 'add_asset_version',
+      description: 'Initiate an upload of a NEW version of an existing asset. Returns a signed S3 URL; PUT the file there to complete. For end-to-end uploads from disk, prefer `upload_file` with the asset id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          filename: { type: 'string' },
+          content_type: { type: 'string' },
+          file_size: { type: 'number' },
+        },
+        required: ['id', 'filename', 'content_type', 'file_size'],
+      },
+    },
+    {
+      name: 'slice_new_asset_version',
+      description: 'Slice a video asset between `start` and `end` (seconds) and queue the result as a NEW VERSION of the same asset. Async — poll the asset.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, start: { type: 'number' }, end: { type: 'number' } },
+        required: ['id', 'start', 'end'],
+      },
+    },
+    {
+      name: 'slice_new_asset',
+      description: 'Slice a video asset between `start` and `end` (seconds) and queue the result as a brand-NEW asset (optionally added to a lightbox).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: idParam,
+          start: { type: 'number' },
+          end: { type: 'number' },
+          lightbox_id: { type: 'number', description: 'Optional: drop the new asset into this lightbox' },
+        },
+        required: ['id', 'start', 'end'],
+      },
+    },
+    {
+      name: 'set_asset_preview_image_from_time',
+      description: 'For a video asset: set the poster/preview image from the frame at `seconds` into the video.',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, seconds: { type: 'number' } },
+        required: ['id', 'seconds'],
+      },
+    },
+    {
+      name: 'upload_asset_transcript',
+      description: 'Upload a closed-caption / transcript text for a video asset (e.g. WebVTT or plain text).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, transcript: { type: 'string' } },
+        required: ['id', 'transcript'],
+      },
+    },
   ],
 
   handlers: {
@@ -412,6 +652,95 @@ Pass none of value/text/*_id to clear the field. The asset is reindexed on succe
     },
     async get_popular_assets(args, { client }) {
       return successResult(await client.getPopularAssets(args));
+    },
+
+    // ── Bulk asset operations ────────────────────────────────────────────
+    async bulk_edit_assets(args, { client }) {
+      return successResult(await client.bulkEditAssets({
+        asset_ids: args.asset_ids as number[],
+        updates: args.updates as Record<string, unknown>,
+      }));
+    },
+    async bulk_add_tags_to_assets(args, { client }) {
+      return successResult(await client.bulkAddTagsToAssets(args.asset_ids as number[], args.tag_names as string[]));
+    },
+    async bulk_remove_tags_from_assets(args, { client }) {
+      return successResult(await client.bulkRemoveTagsFromAssets(args.asset_ids as number[], args.tag_names as string[]));
+    },
+    async bulk_set_asset_rights_package(args, { client }) {
+      return successResult(await client.bulkSetAssetRightsPackage(args.asset_ids as number[], (args.rights_package_id ?? null) as number | null));
+    },
+    async bulk_set_asset_creator_tag(args, { client }) {
+      return successResult(await client.bulkSetAssetCreatorTag(args.asset_ids as number[], (args.creator_tag_id ?? null) as number | null));
+    },
+    async remove_assets_from_group(args, { client }) {
+      return successResult(await client.removeAssetsFromGroup(args.asset_ids as number[], args.asset_group_id as number));
+    },
+
+    // ── Asset enrichment / AI / lifecycle ───────────────────────────────
+    async auto_tag_asset(args, { client }) {
+      return successResult(await client.autoTagAsset(args.id as number | string));
+    },
+    async remove_asset_auto_tag(args, { client }) {
+      return successResult(await client.removeAssetAutoTag(args.id as number | string, args.auto_tag_id as number));
+    },
+    async generate_asset_alt_text(args, { client }) {
+      return successResult(await client.generateAssetAltText(args.id as number | string));
+    },
+    async run_asset_ai(args, { client }) {
+      return successResult(await client.runAssetAi(args.id as number | string, args.custom_meta_field_id as number));
+    },
+    async clear_asset_nsfw(args, { client }) {
+      return successResult(await client.clearAssetNsfw(args.id as number | string));
+    },
+    async restore_asset(args, { client }) {
+      return successResult(await client.restoreAsset(args.id as number | string));
+    },
+    async get_asset_meta(args, { client }) {
+      return successResult(await client.getAssetMeta(args.id as number | string));
+    },
+    async get_asset_content(args, { client }) {
+      return successResult(await client.getAssetContent(args.id as number | string));
+    },
+    async get_asset_ocr_content(args, { client }) {
+      return successResult(await client.getAssetOcrContent(args.id as number | string));
+    },
+    async update_asset_description(args, { client }) {
+      return successResult(await client.updateAssetDescription(args.id as number | string, args.description as string));
+    },
+
+    // ── Search-driven asset reads ────────────────────────────────────────
+    async get_selected_assets(args, { client }) {
+      return successResult(await client.getSelectedAssets(args as Parameters<typeof client.getSelectedAssets>[0]));
+    },
+    async get_assets_updated_since_last_sync(args, { client }) {
+      return successResult(await client.getAssetsUpdatedSinceLastSync(args));
+    },
+    async get_asset_event_log(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.getAssetEventLog(id as number | string, rest));
+    },
+    async get_asset_added_by(args, { client }) {
+      return successResult(await client.getAssetAddedBy(args.id as number | string, args.asset_group_id as number));
+    },
+
+    // ── Asset versioning + video editing ─────────────────────────────────
+    async add_asset_version(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.addAssetVersion(id as number | string, rest as Parameters<typeof client.addAssetVersion>[1]));
+    },
+    async slice_new_asset_version(args, { client }) {
+      return successResult(await client.sliceNewAssetVersion(args.id as number | string, args.start as number, args.end as number));
+    },
+    async slice_new_asset(args, { client }) {
+      const { id, ...rest } = args;
+      return successResult(await client.sliceNewAsset(id as number | string, rest as Parameters<typeof client.sliceNewAsset>[1]));
+    },
+    async set_asset_preview_image_from_time(args, { client }) {
+      return successResult(await client.setAssetPreviewImageFromTime(args.id as number | string, args.seconds as number));
+    },
+    async upload_asset_transcript(args, { client }) {
+      return successResult(await client.uploadAssetTranscript(args.id as number | string, args.transcript as string));
     },
   },
 };

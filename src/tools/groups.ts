@@ -167,6 +167,82 @@ export const groupTools: ToolModule = {
       description: 'Get storage folders hierarchy as a tree',
       inputSchema: { type: 'object', properties: {}, required: [] },
     },
+
+    // ── Lightbox-specific ────────────────────────────────────────────────
+    {
+      name: 'transfer_lightbox_ownership',
+      description: 'Transfer ownership of a lightbox to another user (by user id).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, user_id: { type: 'number' } },
+        required: ['id', 'user_id'],
+      },
+    },
+    {
+      name: 'apply_lightbox_membership_assets',
+      description: 'Push a lightbox membership\'s pinned assets out to all members (creates per-member copies). Used to broadcast curated picks to a shared lightbox.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_group_membership_id: { type: 'number' },
+          asset_ids: { type: 'array', items: { type: 'number' } },
+        },
+        required: ['asset_group_membership_id', 'asset_ids'],
+      },
+    },
+    {
+      name: 'remove_lightbox_membership_assets',
+      description: 'Remove pinned-assets from a lightbox membership (counterpart to apply).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_group_membership_id: { type: 'number' },
+          asset_ids: { type: 'array', items: { type: 'number' } },
+        },
+        required: ['asset_group_membership_id', 'asset_ids'],
+      },
+    },
+
+    // ── Asset group invites (collection / lightbox / folder invitations) ─
+    {
+      name: 'list_asset_group_invites',
+      description: 'List pending and accepted invitations to collections, lightboxes, and storage folders.',
+      inputSchema: { type: 'object', properties: { ...paginationParams }, required: [] },
+    },
+    {
+      name: 'get_asset_group_invite',
+      description: 'Get an asset group invite by id.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
+    {
+      name: 'create_asset_group_invite',
+      description: 'Invite a user (by email) or existing membership to a collection / lightbox / storage folder.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          asset_group_id: { type: 'number', description: 'Collection / Lightbox / StorageFolder id' },
+          email: { type: 'string' },
+          membership_id: { type: 'number', description: 'Existing membership id (alternative to email)' },
+          role: { type: 'string', description: 'Role to grant within the group (e.g. viewer, editor)' },
+          message: { type: 'string', description: 'Personal note included in the invitation email' },
+        },
+        required: ['asset_group_id'],
+      },
+    },
+    {
+      name: 'update_asset_group_invite',
+      description: 'Update an asset group invite (e.g. change role).',
+      inputSchema: {
+        type: 'object',
+        properties: { id: idParam, role: { type: 'string' }, message: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'delete_asset_group_invite',
+      description: 'Cancel/revoke an asset group invite.',
+      inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
+    },
   ],
 
   handlers: {
@@ -241,6 +317,42 @@ export const groupTools: ToolModule = {
     },
     async get_storage_folders_tree(_args, { client }) {
       return successResult(await client.getStorageFoldersTree());
+    },
+
+    // ── Lightbox-specific ────────────────────────────────────────────────
+    async transfer_lightbox_ownership(args, { client }) {
+      return successResult(await client.transferLightboxOwnership(args.id as number | string, args.user_id as number));
+    },
+    async apply_lightbox_membership_assets(args, { client }) {
+      return successResult(await client.applyLightboxMembershipAssets(
+        args.asset_group_membership_id as number,
+        args.asset_ids as number[],
+      ));
+    },
+    async remove_lightbox_membership_assets(args, { client }) {
+      return successResult(await client.removeLightboxMembershipAssets(
+        args.asset_group_membership_id as number,
+        args.asset_ids as number[],
+      ));
+    },
+
+    // ── Asset group invites ──────────────────────────────────────────────
+    async list_asset_group_invites(args, { client }) {
+      return successResult(await client.listAssetGroupInvites(args));
+    },
+    async get_asset_group_invite(args, { client }) {
+      return successResult(await client.getAssetGroupInvite(args.id as number | string));
+    },
+    async create_asset_group_invite(args, { client }) {
+      return successResult(await client.createAssetGroupInvite(args as Parameters<typeof client.createAssetGroupInvite>[0]));
+    },
+    async update_asset_group_invite(args, { client }) {
+      const { id, ...data } = args;
+      return successResult(await client.updateAssetGroupInvite(id as number | string, data));
+    },
+    async delete_asset_group_invite(args, { client }) {
+      await client.deleteAssetGroupInvite(args.id as number | string);
+      return successResult({ success: true });
     },
   },
 };

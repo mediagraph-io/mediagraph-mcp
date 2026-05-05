@@ -372,6 +372,43 @@ export class MediagraphClient {
     return this.request('GET', '/api/organizations/find', { params });
   }
 
+  /**
+   * Get the current user's role-derived abilities in an organization
+   * (manage Asset, view_details Tag, etc.). Pair with INSUFFICIENT_SCOPE
+   * errors so an agent can distinguish role denial from missing token scope.
+   */
+  async getOrganizationAbilities(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/organizations/${id}/abilities`);
+  }
+
+  // ============================================================================
+  // Profile (current user's cross-org state)
+  // ============================================================================
+
+  async listMyOrganizations(): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/profile/organizations');
+  }
+
+  async listMyInvites(): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/profile/invites');
+  }
+
+  async acceptMyInvite(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/profile/invites/${id}/accept`);
+  }
+
+  async getMyOtpUri(): Promise<{ uri: string }> {
+    return this.request<{ uri: string }>('GET', '/api/profile/otp_uri');
+  }
+
+  async enableMyOtp(otpAttempt: string): Promise<unknown> {
+    return this.request('POST', '/api/profile/enable_otp', { body: { otp_attempt: otpAttempt } });
+  }
+
+  async disableMyOtp(): Promise<unknown> {
+    return this.request('POST', '/api/profile/disable_otp');
+  }
+
   // ============================================================================
   // Memberships
   // ============================================================================
@@ -394,6 +431,35 @@ export class MediagraphClient {
 
   async deleteMembership(id: number | string): Promise<void> {
     await this.request<void>('DELETE', `/api/memberships/${id}`);
+  }
+
+  /** Find a single membership by username or user_id. */
+  async findMembership(params: { username?: string; user_id?: number | string }): Promise<Membership> {
+    return this.request<Membership>('GET', '/api/memberships/find', { params });
+  }
+
+  /**
+   * Search memberships scoped to a commentable (collection / lightbox) context —
+   * used for assignee pickers in commenting flows. Plain `q` query supported.
+   */
+  async searchMemberships(params: {
+    q?: string;
+    commentable_type?: 'Collection' | 'Lightbox';
+    commentable_id?: number | string;
+  } & PaginationParams): Promise<Membership[]> {
+    return this.request<Membership[]>('GET', '/api/memberships/search', { params });
+  }
+
+  // ============================================================================
+  // Membership Requests
+  // ============================================================================
+
+  async listMembershipRequests(params?: PaginationParams): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/membership_requests', { params });
+  }
+
+  async getMembershipRequestsPendingCount(): Promise<{ count: number }> {
+    return this.request<{ count: number }>('GET', '/api/membership_requests/pending_count');
   }
 
   // ============================================================================
@@ -557,6 +623,78 @@ export class MediagraphClient {
     await this.request<void>('DELETE', `/api/published_images/${id}`);
   }
 
+  // ============================================================================
+  // Bulk asset operations (collection routes — operate on many assets at once)
+  // ============================================================================
+
+  async bulkEditAssets(data: { asset_ids: number[]; updates: Record<string, unknown> }): Promise<unknown> {
+    return this.request('POST', '/api/assets/bulk_edit', { body: data });
+  }
+
+  async bulkAddTagsToAssets(assetIds: number[], tagNames: string[]): Promise<unknown> {
+    return this.request('POST', '/api/assets/add_tags', { body: { asset_ids: assetIds, tag_names: tagNames } });
+  }
+
+  async bulkRemoveTagsFromAssets(assetIds: number[], tagNames: string[]): Promise<unknown> {
+    return this.request('POST', '/api/assets/remove_tags', { body: { asset_ids: assetIds, tag_names: tagNames } });
+  }
+
+  async bulkSetAssetRightsPackage(assetIds: number[], rightsPackageId: number | null): Promise<unknown> {
+    return this.request('POST', '/api/assets/set_rights_package', { body: { asset_ids: assetIds, rights_package_id: rightsPackageId } });
+  }
+
+  async bulkSetAssetCreatorTag(assetIds: number[], creatorTagId: number | null): Promise<unknown> {
+    return this.request('POST', '/api/assets/set_creator_tag', { body: { asset_ids: assetIds, creator_tag_id: creatorTagId } });
+  }
+
+  async removeAssetsFromGroup(assetIds: number[], assetGroupId: number): Promise<unknown> {
+    return this.request('POST', '/api/assets/remove_group', { body: { asset_ids: assetIds, asset_group_id: assetGroupId } });
+  }
+
+  // ============================================================================
+  // Asset enrichment / AI / lifecycle
+  // ============================================================================
+
+  async autoTagAsset(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/auto_tag`);
+  }
+
+  async removeAssetAutoTag(id: number | string, autoTagId: number): Promise<unknown> {
+    return this.request('DELETE', `/api/assets/${id}/remove_auto_tag`, { params: { auto_tag_id: autoTagId } });
+  }
+
+  async generateAssetAltText(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/generate_alt_text`);
+  }
+
+  async runAssetAi(id: number | string, customMetaFieldId: number): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/run_ai`, { body: { custom_meta_field_id: customMetaFieldId } });
+  }
+
+  async clearAssetNsfw(id: number | string): Promise<unknown> {
+    return this.request('PUT', `/api/assets/${id}/clear_nsfw`);
+  }
+
+  async restoreAsset(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/restore`);
+  }
+
+  async getAssetMeta(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/assets/${id}/meta`);
+  }
+
+  async getAssetContent(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/assets/${id}/content`);
+  }
+
+  async getAssetOcrContent(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/assets/${id}/ocr_content`);
+  }
+
+  async updateAssetDescription(id: number | string, description: string): Promise<unknown> {
+    return this.request('PUT', `/api/assets/${id}/update_description`, { body: { description } });
+  }
+
   async getAssetDownload(id: number | string, options?: {
     size?: string;
     watermarked?: boolean;
@@ -612,6 +750,45 @@ export class MediagraphClient {
 
   async addAssetVersion(id: number | string, data: { filename: string; content_type: string; file_size: number }): Promise<{ signed_upload_url: string; asset_data_version: AssetDataVersion }> {
     return this.request('POST', `/api/assets/${id}/add_version`, { body: data });
+  }
+
+  // ── Video editing (slice clips out of an existing video asset) ──────
+  async sliceNewAssetVersion(id: number | string, startSeconds: number, endSeconds: number): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/slice_new_version`, { body: { start: startSeconds, end: endSeconds } });
+  }
+
+  async sliceNewAsset(id: number | string, data: { start: number; end: number; lightbox_id?: number }): Promise<unknown> {
+    return this.request('POST', `/api/assets/${id}/slice_new_asset`, { body: data });
+  }
+
+  async setAssetPreviewImageFromTime(id: number | string, seconds: number): Promise<Asset> {
+    return this.request<Asset>('PUT', `/api/assets/${id}/set_preview_image_from_time`, { body: { seconds } });
+  }
+
+  async uploadAssetTranscript(id: number | string, transcript: string): Promise<unknown> {
+    return this.request('PUT', `/api/assets/${id}/upload_transcript`, { body: { transcript } });
+  }
+
+  // ── Search-adjacent asset reads ─────────────────────────────────────
+  async getSelectedAssets(params: { ids: number[] } & Record<string, unknown>): Promise<unknown> {
+    // POST /api/assets/selected — like search but for an explicit ID set.
+    return this.request('POST', '/api/assets/selected', { body: params });
+  }
+
+  async getAssetsUpdatedSinceLastSync(params?: {
+    last_sync_at?: string | number;
+    any_user?: boolean;
+    created_via?: string;
+  }): Promise<number[]> {
+    return this.request<number[]>('GET', '/api/assets/updated_since_last_sync', { params });
+  }
+
+  async getAssetEventLog(id: number | string, params?: PaginationParams): Promise<unknown> {
+    return this.request('GET', `/api/assets/${id}/log`, { params });
+  }
+
+  async getAssetAddedBy(id: number | string, assetGroupId: number): Promise<unknown> {
+    return this.request('GET', `/api/assets/${id}/added_by`, { params: { asset_group_id: assetGroupId } });
   }
 
   async revertAsset(id: number | string, version: number): Promise<Asset> {
@@ -729,6 +906,22 @@ export class MediagraphClient {
     return this.request<Lightbox>('POST', `/api/lightboxes/${id}/transfer_ownership`, { body: { user_id: userId } });
   }
 
+  /**
+   * Apply a lightbox membership's pinned-assets snapshot to all members
+   * (creates per-user copies). Used for sharing curated picks.
+   */
+  async applyLightboxMembershipAssets(membershipId: number, assetIds: number[]): Promise<unknown> {
+    return this.request('POST', '/api/lightboxes/apply_asset_group_membership_assets', {
+      body: { asset_group_membership_id: membershipId, asset_ids: assetIds },
+    });
+  }
+
+  async removeLightboxMembershipAssets(membershipId: number, assetIds: number[]): Promise<unknown> {
+    return this.request('POST', '/api/lightboxes/remove_asset_group_membership_assets', {
+      body: { asset_group_membership_id: membershipId, asset_ids: assetIds },
+    });
+  }
+
   async addAssetToLightbox(lightboxId: number | string, assetId: number | string): Promise<void> {
     // Lightboxes don't have a direct add_asset endpoint - use the assets/add_group endpoint
     await this.addAssetsToGroup([Number(assetId)], Number(lightboxId));
@@ -822,6 +1015,46 @@ export class MediagraphClient {
     return this.request<unknown[]>('GET', '/api/tags/events', { params });
   }
 
+  async getRecentTagEvents(): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/tags/recent_events');
+  }
+
+  /** POST /api/tags/:id/remove_taxonomies — detach tag from all taxonomies. */
+  async removeTagTaxonomies(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/tags/${id}/remove_taxonomies`);
+  }
+
+  /** Bulk operation across many tags (set list, add/remove taxonomy, etc.). */
+  async bulkUpdateTags(data: {
+    tag_ids: number[];
+    list?: 'searchable' | 'visible' | 'blocked';
+    add_taxonomy?: boolean;
+    remove_taxonomy?: boolean;
+  }): Promise<unknown> {
+    return this.request('POST', '/api/tags/bulk', { body: data });
+  }
+
+  async bulkDestroyTags(ids: number[]): Promise<unknown> {
+    return this.request('DELETE', '/api/tags/bulk_destroy', { body: { ids } });
+  }
+
+  // ── Tag → face linkage (associate person tags with users / creators) ──
+  async getTagAssociatedFaces(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/tags/${id}/associated_faces`);
+  }
+  async setTagFaceMembership(id: number | string, email: string): Promise<unknown> {
+    return this.request('POST', `/api/tags/${id}/set_face_membership`, { body: { email } });
+  }
+  async removeTagFaceMembership(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/tags/${id}/remove_face_membership`);
+  }
+  async setTagFaceCreatorTag(id: number | string, name: string): Promise<unknown> {
+    return this.request('POST', `/api/tags/${id}/set_face_creator_tag`, { body: { name } });
+  }
+  async removeTagFaceCreatorTag(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/tags/${id}/remove_face_creator_tag`);
+  }
+
   // ============================================================================
   // Auto Tags
   // ============================================================================
@@ -852,6 +1085,20 @@ export class MediagraphClient {
 
   async deleteTagging(id: number | string): Promise<void> {
     await this.request<void>('DELETE', `/api/taggings/${id}`);
+  }
+
+  /** Promote a tagging to the canonical face for its tag (used in face-recognition flows). */
+  async setMainFaceForTagging(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/taggings/${id}/set_main_face`);
+  }
+
+  /** Associate a tagging with a Rekognition face id (link an existing tagging to a detected face). */
+  async associateTaggingWithFace(id: number | string, faceId: string): Promise<unknown> {
+    return this.request('POST', `/api/taggings/${id}/associate_with_face`, { body: { face_id: faceId } });
+  }
+
+  async disassociateTaggingWithFace(id: number | string): Promise<unknown> {
+    return this.request('POST', `/api/taggings/${id}/disassociate_with_face`);
   }
 
   // ============================================================================
@@ -904,6 +1151,14 @@ export class MediagraphClient {
 
   async getTaxonomyTagsTree(taxonomyId: number | string): Promise<AssetGroupTree[]> {
     return this.request<AssetGroupTree[]>('GET', `/api/taxonomies/${taxonomyId}/taxonomy_tags/tree`);
+  }
+
+  async getTaxonomyTagsVisibleAssetCounts(taxonomyId: number | string, taxonomyTagIds: number[]): Promise<unknown> {
+    return this.request('POST', `/api/taxonomies/${taxonomyId}/taxonomy_tags/visible_asset_counts`, { body: { ids: taxonomyTagIds } });
+  }
+
+  async bulkFindTaxonomyTags(names: string[]): Promise<TaxonomyTag[]> {
+    return this.request<TaxonomyTag[]>('POST', '/api/taxonomy_tags/bulk_find', { body: { names } });
   }
 
   // ============================================================================
@@ -1048,6 +1303,14 @@ export class MediagraphClient {
     return this.request('GET', `/api/shares/${id}/status`);
   }
 
+  async getShareHtml(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/shares/${id}/html`);
+  }
+
+  async getShareAssets(id: number | string, params?: PaginationParams): Promise<unknown> {
+    return this.request('GET', `/api/shares/${id}/assets`, { params });
+  }
+
   // ============================================================================
   // Collection Shares
   // ============================================================================
@@ -1106,6 +1369,50 @@ export class MediagraphClient {
 
   async getAccessRequestsTree(): Promise<AssetGroupTree[]> {
     return this.request<AssetGroupTree[]>('GET', '/api/access_requests/tree');
+  }
+
+  /** Admin: finalize a submitted access request (approves and grants access). */
+  async finalizeAccessRequest(id: number | string): Promise<AccessRequest> {
+    return this.request<AccessRequest>('POST', `/api/access_requests/${id}/finalize`);
+  }
+
+  /** Admin: revoke a previously granted access request. */
+  async revokeAccessRequest(id: number | string): Promise<AccessRequest> {
+    return this.request<AccessRequest>('POST', `/api/access_requests/${id}/revoke`);
+  }
+
+  /** Guest: record agreement to terms / NDA on an access request. */
+  async agreeToAccessRequest(id: number | string): Promise<AccessRequest> {
+    return this.request<AccessRequest>('POST', `/api/access_requests/${id}/agree`);
+  }
+
+  /** Set a custom meta value on an access request (mirrors the asset endpoint). */
+  async setAccessRequestCustomMeta(
+    id: number | string,
+    data: {
+      custom_meta_field_id: number | string;
+      value?: string;
+      text?: string;
+      custom_meta_value_id?: number | string;
+      custom_meta_value_ids?: Array<number | string>;
+    },
+  ): Promise<unknown> {
+    const { custom_meta_value_ids, ...rest } = data;
+    const body: Record<string, unknown> = { ...rest };
+    if (custom_meta_value_ids !== undefined) body.custom_meta_value_id = custom_meta_value_ids;
+    return this.request('PUT', `/api/access_requests/${id}/update_custom_meta`, { body });
+  }
+
+  // ============================================================================
+  // Access Grants
+  // ============================================================================
+
+  async listAccessGrants(params?: PaginationParams): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/access_grants', { params });
+  }
+
+  async deleteAccessGrant(id: number | string): Promise<void> {
+    await this.request<void>('DELETE', `/api/access_grants/${id}`);
   }
 
   // ============================================================================
@@ -1590,6 +1897,11 @@ export class MediagraphClient {
     return this.request<WorkflowStep>('POST', `/api/workflow_steps/${id}/approve`, { body: { asset_ids: assetIds } });
   }
 
+  /** Approve a curated subset (picks) on a workflow step. */
+  async approveWorkflowStepPicks(id: number | string, assetIds: number[]): Promise<WorkflowStep> {
+    return this.request<WorkflowStep>('POST', `/api/workflow_steps/${id}/approve_picks`, { body: { asset_ids: assetIds } });
+  }
+
   // ============================================================================
   // Comments
   // ============================================================================
@@ -1732,6 +2044,41 @@ export class MediagraphClient {
     return this.request<UserGroup>('POST', '/api/user_groups', { body: { user_group: data } });
   }
 
+  // ============================================================================
+  // Asset Group Invites (collection / lightbox / folder invitations)
+  // ============================================================================
+
+  async listAssetGroupInvites(params?: PaginationParams): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/asset_group_invites', { params });
+  }
+
+  async getAssetGroupInvite(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/asset_group_invites/${id}`);
+  }
+
+  /**
+   * Create an invite to an asset group (collection / lightbox / folder).
+   * Pass either `asset_group_id` (top-level form) or use the nested form by
+   * passing `asset_group_id` as the parent id — both server forms exist.
+   */
+  async createAssetGroupInvite(data: {
+    asset_group_id: number;
+    email?: string;
+    membership_id?: number;
+    role?: string;
+    message?: string;
+  }): Promise<unknown> {
+    return this.request('POST', `/api/asset_groups/${data.asset_group_id}/asset_group_invites`, { body: { asset_group_invite: data } });
+  }
+
+  async updateAssetGroupInvite(id: number | string, data: Record<string, unknown>): Promise<unknown> {
+    return this.request('PUT', `/api/asset_group_invites/${id}`, { body: { asset_group_invite: data } });
+  }
+
+  async deleteAssetGroupInvite(id: number | string): Promise<void> {
+    await this.request<void>('DELETE', `/api/asset_group_invites/${id}`);
+  }
+
   async updateUserGroup(id: number | string, data: Partial<UserGroup>): Promise<UserGroup> {
     return this.request<UserGroup>('PUT', `/api/user_groups/${id}`, { body: { user_group: data } });
   }
@@ -1778,6 +2125,15 @@ export class MediagraphClient {
 
   async getAvailableRoleLevels(): Promise<string[]> {
     return this.request<string[]>('GET', '/api/invites/available_role_levels');
+  }
+
+  /**
+   * Accept an invite using the email token (public — no auth required server-side
+   * if the token is valid). Different from `acceptMyInvite` which uses the
+   * profile-scoped invite list for an already-authenticated user.
+   */
+  async acceptInvite(token: string): Promise<unknown> {
+    return this.request('POST', '/api/invites/accept', { body: { token } });
   }
 
   // ============================================================================
