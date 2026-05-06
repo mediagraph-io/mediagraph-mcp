@@ -245,7 +245,8 @@ authoritative inventory; this map is the mental model.
 **Bulk jobs** — `list_bulk_jobs`, `get_bulk_job`, `create_bulk_job`,
 `cancel_bulk_job`, `get_bulk_job_queue_position`, `preview_rename_bulk_job`,
 `bulk_download_assets`, `list_meta_imports`, `get_meta_import`,
-`list_ingestions`.
+`list_ingestions`. To stream progress in real-time use `mediagraph watch
+bulk_job <guid>` — see "Watching long-running jobs" above.
 
 **Uploads** — `upload_file` (one file: file_path or base64 file_data),
 `upload_files` (many local files), `create_upload_session` +
@@ -290,6 +291,41 @@ composite slug or id+name for lightboxes; id for tags). The tool will
 autofetch the entity if needed to derive a missing identifier; pass
 `--autofetch false` to skip and just build from what you provided.
 
+## Watching long-running jobs
+
+For anything that runs asynchronously on the server (bulk jobs, asset
+processing, imports, share generation, …) prefer `mediagraph watch` over
+polling. It opens an ActionCable WebSocket subscription, prints each
+progress event as a JSON line on stdout, and exits 0 when the job hits a
+terminal state. Falls back to polling if the WS path fails — you don't
+have to choose.
+
+```bash
+mediagraph watch <type> <id> [--timeout SEC] [--poll-only|--ws-only] [--poll-interval SEC]
+```
+
+| Type | What it watches | What `<id>` is |
+| --- | --- | --- |
+| `bulk_job` | tagging / rights / rename / etc. bulk operations | `guid` from `create_bulk_job` |
+| `upload` | a multi-asset upload session | upload `id` |
+| `asset` | a single asset's processing pipeline (transcode, thumbs, AI tagging, face indexing) | asset `id` |
+| `meta_import` / `tag_import` | CSV-driven metadata or tag imports | import `id` |
+| `ingestion` | FTP / Frame.io style ingest | ingestion `id` |
+| `share` | share generation pipeline (zip prep + URL signing) | share `id` |
+| `bulk_upload` | large bulk-upload sessions | session `guid` |
+| `meta_download` | background CSV export of asset metadata | download `id` |
+
+Pipe directly into `jq` to react to events as they arrive, or `tee` to
+keep the full stream while computing on it.
+
+`watch` vs `--wait`:
+- `watch` streams every progress event in real-time and exits at terminal.
+  Use this when you want to surface progress, log per-step state, or react
+  before completion.
+- `--wait` is a global flag that polls the sibling `get_*` endpoint until
+  terminal and returns only the final state. Use this when you don't care
+  about the journey, just the destination.
+
 ## Common workflows
 
 **Find all untagged JPEGs:**
@@ -297,10 +333,24 @@ autofetch the entity if needed to derive a missing identifier; pass
 mediagraph search_assets --q 'NOT tag_text:** AND ext:jpg' --per_page 100
 ```
 
-**Bulk-tag a set of assets:**
+**Bulk-tag a set of assets and watch progress:**
 ```bash
-mediagraph create_bulk_job --asset_ids 12,34,56 --tag_names sunset,beach --tag_mode add
-mediagraph get_bulk_job --id <id_from_above>
+guid=$(mediagraph create_bulk_job --asset_ids 12,34,56 --tag_names sunset,beach --tag_mode add | jq -r .guid)
+mediagraph watch bulk_job "$guid"      # streams progress=0/20/40/.../100, exits at done
+```
+
+**Upload an image and watch it process:**
+```bash
+id=$(mediagraph upload_file --file_path /path/to/photo.jpg | jq -r .asset.id)
+mediagraph watch asset "$id"           # exits when aasm_state=processed (or processing_error)
+```
+
+**Watch a video transcode + face-index complete:**
+```bash
+id=$(mediagraph upload_file --file_path clip.mp4 | jq -r .asset.id)
+mediagraph watch asset "$id" --timeout 600
+# emits intermediate processingProgress events (storage move, thumb, transcode,
+# face index) and exits when attrs.final_storage=true or aasm_state=processed
 ```
 
 **Preview a rename before submitting:**
