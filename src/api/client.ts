@@ -364,6 +364,16 @@ export class MediagraphClient {
     return this.request<WhoamiResponse>('GET', '/api/whoami');
   }
 
+  /**
+   * Mint a Devise-JWT for ActionCable use. The cable connection requires a
+   * JWT (server-side `find_verified_user` rejects anything else), but the
+   * REST API uses OAuth Bearer / PAT — this endpoint bridges the two when
+   * the caller is authenticated as a user.
+   */
+  async refreshJwt(): Promise<{ token: string }> {
+    return this.request<{ token: string }>('POST', '/api/refresh');
+  }
+
   async getOrganization(id: number | string): Promise<{ organization: Record<string, unknown> }> {
     return this.request('GET', `/api/organizations/${id}`);
   }
@@ -2229,6 +2239,34 @@ export class MediagraphClient {
     return this.request<Ingestion[]>('GET', '/api/ingestions', { params });
   }
 
+  async getIngestion(id: number | string): Promise<Ingestion> {
+    return this.request<Ingestion>('GET', `/api/ingestions/${id}`);
+  }
+
+  async cancelIngestion(id: number | string): Promise<Ingestion> {
+    return this.request<Ingestion>('PUT', `/api/ingestions/${id}/cancel`);
+  }
+
+  // ============================================================================
+  // Bulk Uploads
+  // ============================================================================
+
+  async listBulkUploads(params?: PaginationParams): Promise<unknown[]> {
+    return this.request<unknown[]>('GET', '/api/bulk_uploads', { params });
+  }
+
+  async getBulkUpload(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/bulk_uploads/${id}`);
+  }
+
+  async getBulkUploadStatus(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/bulk_uploads/${id}/status`);
+  }
+
+  async getBulkUploadExistingAssets(id: number | string, params?: PaginationParams): Promise<unknown> {
+    return this.request('GET', `/api/bulk_uploads/${id}/existing_assets`, { params });
+  }
+
   // ============================================================================
   // Meta Imports
   // ============================================================================
@@ -2361,6 +2399,10 @@ export class MediagraphClient {
   // ============================================================================
   // Meta Downloads (background CSV export)
   // ============================================================================
+
+  async getMetaDownload(id: number | string): Promise<unknown> {
+    return this.request('GET', `/api/download_meta/${id}`);
+  }
 
   async listMetaDownloads(params?: PaginationParams & { dates?: string[]; user_id?: number }): Promise<unknown[]> {
     return this.request<unknown[]>('GET', '/api/meta_downloads', { params });

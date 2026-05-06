@@ -135,6 +135,7 @@ Top-level commands:
 | `list-tools` | Print every tool name, description, required + optional flags |
 | `search-tools <query>` | Ranked keyword search over the tool registry |
 | `sync ...` | Continuous folder sync (see below) |
+| `watch <type> <id>` | Stream progress for a long-running job. Tries an ActionCable WebSocket subscription first (low-latency push), falls back to polling on any failure. Each event prints as a JSON line. Types: `bulk_job <guid>`, `upload <id>`, `asset <id>` (single-asset processing pipeline), `meta_import <id>`, `tag_import <id>`, `ingestion <id>`, `share <id>`, `bulk_upload <guid>`, `meta_download <id>`. Flags: `--timeout SEC`, `--poll-only`, `--ws-only`, `--poll-interval SEC`. |
 | `<tool_name> --help` | Show flags for a single tool |
 | `<tool_name> [flags]` | Invoke a tool, prints JSON |
 

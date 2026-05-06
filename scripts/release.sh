@@ -22,6 +22,18 @@ echo "==> Bumping version ($VERSION)..."
 NEW_VERSION=$(npm version "$VERSION" --no-git-tag-version | sed 's/^v//')
 echo "    New version: $NEW_VERSION"
 
+# Validate the changelog file exists BEFORE doing anything destructive — every
+# release must ship with hand-written notes for the GitHub release page.
+NOTES_FILE="release-notes/v$NEW_VERSION.md"
+if [ ! -f "$NOTES_FILE" ]; then
+  # Roll the version bump back so the workspace stays clean.
+  git checkout package.json package-lock.json manifest.json 2>/dev/null || true
+  echo "" >&2
+  echo "ERROR: missing changelog file: $NOTES_FILE" >&2
+  echo "Create it with the user-facing release notes, then re-run." >&2
+  exit 1
+fi
+
 echo "==> Updating manifest.json..."
 # Use node to update manifest.json
 node -e "
@@ -51,8 +63,25 @@ echo "==> Creating and pushing tag..."
 git tag "v$NEW_VERSION"
 git push origin "v$NEW_VERSION"
 
+# Attach the changelog to the GitHub release. Actions may already have created
+# the release (its workflow runs on tag push and uploads the .mcpb bundle), so
+# `gh release create` may collide — fall through to `gh release edit` in that
+# case so the body is updated either way.
+echo "==> Posting changelog to GitHub release..."
+if ! gh release create "v$NEW_VERSION" \
+      --title "v$NEW_VERSION" \
+      --notes-file "$NOTES_FILE" 2>/dev/null; then
+  # Wait briefly for Actions to create the release, then edit.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if gh release view "v$NEW_VERSION" >/dev/null 2>&1; then break; fi
+    sleep 2
+  done
+  gh release edit "v$NEW_VERSION" --notes-file "$NOTES_FILE"
+fi
+
 echo ""
 echo "==> Release v$NEW_VERSION initiated!"
-echo "    npm: https://www.npmjs.com/package/@mediagraph/cli"
-echo "    GitHub Actions will create the release with .mcpb"
+echo "    npm:    https://www.npmjs.com/package/@mediagraph/cli"
+echo "    GitHub: https://github.com/mediagraph-io/mediagraph-mcp/releases/tag/v$NEW_VERSION"
+echo "    GitHub Actions will attach the .mcpb bundle to the release."
 echo "    Watch: gh run watch --repo mediagraph-io/mediagraph-mcp"

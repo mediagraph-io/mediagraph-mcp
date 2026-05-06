@@ -62,6 +62,10 @@ Usage:
   mediagraph list-tools [--brief]         List all tools (JSON)
   mediagraph search-tools <query>         Find tools by keyword
   mediagraph sync ...                     Continuous folder sync
+  mediagraph watch <type> <id>            Stream progress for a long-running job
+                                          (ActionCable WS, polling fallback). Types:
+                                          bulk_job, upload, asset, meta_import, tag_import,
+                                          ingestion, share, bulk_upload, meta_download
   mediagraph <tool_name> [flags]          Invoke a tool, prints JSON result
   mediagraph <tool_name> --help           Show flags for a specific tool
 
@@ -165,6 +169,17 @@ async function dispatch(argv: string[]): Promise<void> {
   if (command === 'sync') {
     const { runSyncCli } = await import('./sync.js');
     await runSyncCli(rest);
+    return;
+  }
+
+  if (command === 'watch') {
+    const { runWatchCli } = await import('./watch.js');
+    const runtime = new Runtime();
+    if (!(await runtime.getAuth())) {
+      throw new CliError('AUTH_REQUIRED', 'Not authenticated.',
+        'Run `mediagraph auth login` (interactive) or set MEDIAGRAPH_PAT + MEDIAGRAPH_ORGANIZATION_ID for headless auth.');
+    }
+    await runWatchCli(rest, runtime);
     return;
   }
 
