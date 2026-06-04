@@ -13,6 +13,7 @@ import { CliError, classify } from '../cli/errors.js';
 import { isPaginated, paginate } from '../cli/pagination.js';
 import { stripGlobalFlags } from '../cli/global_flags.js';
 import { waitForTerminal, WaitTimeout } from '../cli/wait.js';
+import { findSkillDoc, listSkillDocs, loadRootSkillDoc, loadSkillsIndexDoc } from '../cli/skill.js';
 import { MediagraphClient, MediagraphApiError, DryRunIntercept } from '../api/client.js';
 import { getAuthStatus, type Runtime } from '../core/runtime.js';
 import type { ToolDefinition, ToolResult } from '../tools/shared.js';
@@ -221,6 +222,40 @@ describe('package version', () => {
     const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf-8')) as { name: string; version: string };
     expect(pkg.name).toBe('@mediagraph/cli');
     expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+describe('cli/skill guides', () => {
+  it('keeps the legacy root skill guide available', () => {
+    expect(loadRootSkillDoc()).toContain('# Mediagraph CLI');
+  });
+
+  it('exposes focused skills for common agent workflows', () => {
+    const names = listSkillDocs().map(doc => doc.name);
+    expect(names).toEqual([
+      'search',
+      'organize',
+      'metadata',
+      'ingest',
+      'bulk',
+      'sharing',
+      'workflows',
+      'admin',
+    ]);
+  });
+
+  it('prints an index that points agents at named recipe docs', () => {
+    const index = loadSkillsIndexDoc();
+    expect(index).toContain('mediagraph skills search');
+    expect(index).toContain('AssetGroup');
+    expect(index).toContain('BulkJob');
+  });
+
+  it('returns a named Markdown guide with concrete commands', () => {
+    const bulk = findSkillDoc('bulk');
+    expect(bulk?.markdown).toContain('# Mediagraph Skill: Bulk Jobs');
+    expect(bulk?.markdown).toContain('mediagraph create_bulk_job');
+    expect(bulk?.markdown).toContain('mediagraph watch bulk_job');
   });
 });
 

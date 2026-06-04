@@ -24,6 +24,8 @@ at [docs.mediagraph.io](https://docs.mediagraph.io).
 
 ```bash
 npm install -g @mediagraph/cli        # provides the `mediagraph` command
+mediagraph skills                      # focused recipe index for agents
+mediagraph skills bulk                 # one focused guide by use case
 mediagraph skill                       # → prints this guide; start here cold
 mediagraph auth login                  # OAuth, opens a browser, persists tokens (full read-write)
 mediagraph auth login --read-only      # OAuth with :read on every entity (safer for grants)
@@ -128,7 +130,8 @@ Top-level commands:
 
 | Command | Purpose |
 | --- | --- |
-| `skill` | Print this agent guide |
+| `skills [name/list/all]` | Print focused agent recipe guides for search, organize, metadata, ingest, bulk jobs/imports, sharing, workflows, and admin |
+| `skill [name]` | Print this full agent guide, or one focused guide when a name is provided |
 | `serve` | Start MCP server (stdio). Used by Claude Desktop, etc. |
 | `auth login [--read-only \| --scope <CSV>]` / `auth logout` / `auth status` | OAuth lifecycle (default = full read-write) |
 | `update` | Force a fresh npm-registry check; emits `{current, latest, updateAvailable, installCommand}` JSON |
@@ -268,8 +271,8 @@ paths stream from disk — no whole-file buffering.
 
 **Notifications** — `list_notifications`, `get_notification_count`.
 
-**Webhooks** — `list_webhooks`, `create_webhook`, `update_webhook`,
-`delete_webhook`, `get_webhook_logs`, `test_webhook`.
+**Webhooks** — `list_webhooks`, `get_webhook`, `create_webhook`,
+`delete_webhook`, `get_webhook_logs`.
 
 **Admin** — `list_user_groups`, `create_user_group`, `list_invites`,
 `create_invite`, `update_invite`, `resend_invite`,

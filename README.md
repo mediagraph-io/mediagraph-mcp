@@ -42,6 +42,8 @@ mediagraph <tool> [flags]              # invoke any tool, prints JSON
 mediagraph <tool> --help               # show flags for a tool
 mediagraph list-tools [--brief]        # every tool, JSON
 mediagraph search-tools "<query>"      # ranked keyword search over the registry
+mediagraph skills [name|list|all]      # focused Markdown recipes for agents
+mediagraph skill                       # full bundled agent onboarding guide
 mediagraph sync ...                    # continuous folder sync (see below)
 mediagraph serve                       # start the MCP server on stdio
 mediagraph auth login | logout | status
@@ -142,6 +144,8 @@ Harness options (the `run` command is the same in all cases):
 The CLI ships ~157 tools. Don't load them all — search:
 
 ```bash
+mediagraph skills                      # focused guide index
+mediagraph skills search               # asset search and inspection recipes
 mediagraph search-tools "rename file" --limit 5
 mediagraph search-tools "watermark"
 mediagraph create_bulk_job --help     # one tool, full schema
@@ -187,9 +191,9 @@ It also includes an interactive visual gallery (`search_assets_visual`) for thum
 | `MEDIAGRAPH_REDIRECT_PORT` | `52584` | Local OAuth callback port |
 | `MEDIAGRAPH_SYNC_ROOT` | `~/.mediagraph/sync` | Override sync state directory |
 
-## Agent skill file
+## Agent guides
 
-`SKILL.md` is included for agents (Claude, etc.) — it covers auth, the JSON I/O contract, search syntax, the capability map, and common workflows. Drop it into your agent's skill directory.
+`mediagraph skills` prints focused Markdown guides for agents: search, organize, metadata, ingest, bulk jobs/imports, sharing, workflows, and admin. `mediagraph skill` prints the full bundled `SKILL.md` onboarding guide.
 
 ## Security
 

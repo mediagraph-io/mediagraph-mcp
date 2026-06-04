@@ -4,6 +4,7 @@
  * Subcommands:
  *   serve                       Start the MCP server (stdio).
  *   auth login | logout | status [--pat <token> --org <id>]
+ *   skill | skills              Print agent guides and focused workflow recipes.
  *   list-tools [--brief]        Print all tool names + descriptions as JSON.
  *   search-tools <query>        Keyword search over the tool registry.
  *   sync ...                    Continuous folder sync.
@@ -44,12 +45,14 @@ const HELP = `Mediagraph CLI / MCP server
 
 Mediagraph is a digital asset management (DAM) platform. This CLI exposes
 the entire API as ~157 tools, all returning JSON on stdout. New here?
-Run \`mediagraph skill\` for the agent-targeted onboarding guide.
+Run \`mediagraph skills\` for focused agent recipes, or \`mediagraph skill\`
+for the full onboarding guide.
 
 Usage:
   mediagraph --version                    Print the package version
   mediagraph update                       Force a fresh check for newer versions on npm (JSON)
-  mediagraph skill                        Print the agent skill guide (start here)
+  mediagraph skills [name|list|all]       Print focused agent recipes (start here)
+  mediagraph skill [name]                 Print the full agent guide, or one focused guide
   mediagraph serve                        Start the MCP server (stdio)
   mediagraph auth login                   OAuth-authorize with Mediagraph (default: full read-write)
   mediagraph auth login --read-only       OAuth, request only :read on every entity
@@ -191,7 +194,13 @@ async function dispatch(argv: string[]): Promise<void> {
 
   if (command === 'skill') {
     const { runSkillCli } = await import('./skill.js');
-    runSkillCli();
+    runSkillCli(rest);
+    return;
+  }
+
+  if (command === 'skills') {
+    const { runSkillsCli } = await import('./skill.js');
+    runSkillsCli(rest);
     return;
   }
 
@@ -199,7 +208,7 @@ async function dispatch(argv: string[]): Promise<void> {
   const definition = toolDefinitions.find(t => t.name === command);
   if (!definition) {
     throw new CliError('UNKNOWN_COMMAND', `Unknown command: ${command}`,
-      'Run `mediagraph skill` for the agent guide, `mediagraph search-tools <query>` to find a tool, or `mediagraph --help`.');
+      'Run `mediagraph skills` for agent recipes, `mediagraph search-tools <query>` to find a tool, or `mediagraph --help`.');
   }
 
   let parsed;

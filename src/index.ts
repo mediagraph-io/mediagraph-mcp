@@ -11,6 +11,7 @@
  * New CLI:
  *   - serve                      -> start the MCP server (explicit)
  *   - auth login|logout|status   -> grouped auth subcommands
+ *   - skills                     -> print focused agent workflow guides
  *   - list-tools                 -> JSON list of every tool
  *   - <tool_name> [flags]        -> invoke a tool, prints JSON to stdout
  */
