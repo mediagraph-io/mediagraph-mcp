@@ -21,7 +21,7 @@ import { handleTool, toolDefinitions } from './tools/index.js';
 import { listResources, readResource, resourceTemplates, type ResourceContext } from './resources/index.js';
 
 export async function runServer(): Promise<void> {
-  const runtime = new Runtime();
+  const runtime = new Runtime(undefined, 'mcp');
   const resourceContext: ResourceContext = { client: runtime.client };
 
   const server = new Server(

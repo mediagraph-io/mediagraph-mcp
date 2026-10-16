@@ -150,7 +150,7 @@ async function dispatch(argv: string[]): Promise<void> {
   }
 
   if (command === 'auth' || command === 'login' || command === 'logout' || command === 'status' || command === 'whoami') {
-    const runtime = new Runtime();
+    const runtime = new Runtime(undefined, 'cli');
     await runAuth(runtime, command, rest);
     return;
   }
@@ -177,7 +177,7 @@ async function dispatch(argv: string[]): Promise<void> {
 
   if (command === 'watch') {
     const { runWatchCli } = await import('./watch.js');
-    const runtime = new Runtime();
+    const runtime = new Runtime(undefined, 'cli');
     if (!(await runtime.getAuth())) {
       throw new CliError('AUTH_REQUIRED', 'Not authenticated.',
         'Run `mediagraph auth login` (interactive) or set MEDIAGRAPH_PAT + MEDIAGRAPH_ORGANIZATION_ID for headless auth.');
@@ -235,7 +235,7 @@ async function invokeTool(
   args: Record<string, unknown>,
   flags: GlobalFlags,
 ): Promise<void> {
-  const runtime = new Runtime();
+  const runtime = new Runtime(undefined, 'cli');
 
   if (definition.name !== 'reauthorize' && !flags.dryRun) {
     const auth = await runtime.getAuth();

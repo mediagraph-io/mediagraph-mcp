@@ -236,3 +236,14 @@ MIT — see [LICENSE](LICENSE).
 - [Mediagraph](https://www.mediagraph.io) — product info, pricing, demos
 - [API Documentation](https://docs.mediagraph.io)
 - [GitHub Issues](https://github.com/mediagraph/mediagraph-mcp/issues)
+
+### History provenance
+
+The MCP server automatically sends `X-Mediagraph-Source: mcp`; CLI commands,
+including sync/watch, send `X-Mediagraph-Source: cli` on authenticated Mediagraph
+API requests. The header is not sent to S3 or file-download hosts. Both sources
+appear as Agent in Mediagraph History, while remaining separately filterable.
+
+Use `get_asset_event_log` with `request_source` set to `mcp`, `cli`, `web`,
+`api`, `system`, `agent` (MCP and CLI), or `unknown` (historical or unattributed records).
+Source labels describe provenance, not authorization or human approval.

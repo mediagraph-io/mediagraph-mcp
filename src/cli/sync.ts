@@ -116,7 +116,7 @@ function cmdShow(args: string[]): void {
 
 async function cmdRun(args: string[]): Promise<void> {
   const name = requireName(args);
-  const runtime = new Runtime();
+  const runtime = new Runtime(undefined, 'cli');
   await ensureAuth(runtime);
   const summary = await runSync(name, runtime.client);
   emit(summary);
@@ -130,7 +130,7 @@ async function cmdWatch(args: string[]): Promise<void> {
     ? Number(flags['interval-seconds'])
     : frequencySeconds(config.frequency);
 
-  const runtime = new Runtime();
+  const runtime = new Runtime(undefined, 'cli');
   await ensureAuth(runtime);
   process.stdout.write(`Watching "${name}" every ${intervalSeconds}s (Ctrl+C to stop)\n`);
   await watchSync(name, runtime.client, { intervalMs: intervalSeconds * 1000 }, msg => {

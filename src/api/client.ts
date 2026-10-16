@@ -58,7 +58,11 @@ export type AuthCredentials =
   | { mode: 'bearer'; token: string }
   | { mode: 'basic'; pat: string; organizationId: number };
 
+export type RequestSource = 'mcp' | 'cli';
+export type RequestSourceFilter = 'web' | 'api' | 'mcp' | 'cli' | 'system' | 'agent' | 'unknown';
+
 export interface MediagraphClientConfig {
+  requestSource?: RequestSource;
   apiUrl?: string;
   /** Preferred: full auth resolver. Returns Bearer (OAuth) or Basic+OrgId (PAT). */
   getAuth?: () => Promise<AuthCredentials | null>;
@@ -153,6 +157,7 @@ export class DryRunIntercept extends Error {
 
 export class MediagraphClient {
   private apiUrl: string;
+  private requestSource?: RequestSource;
   private resolveAuth: () => Promise<AuthCredentials | null>;
   private maxRetries = 3;
   private retryDelay = 1000;
@@ -160,6 +165,7 @@ export class MediagraphClient {
   public dryRun: boolean;
 
   constructor(config: MediagraphClientConfig) {
+    this.requestSource = config.requestSource;
     this.apiUrl = config.apiUrl || 'https://api.mediagraph.io';
     this.dryRun = config.dryRun ?? false;
     if (config.getAuth) {
@@ -226,6 +232,7 @@ export class MediagraphClient {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         };
+        if (this.requestSource) headers['X-Mediagraph-Source'] = this.requestSource;
         if (auth.mode === 'bearer') {
           headers.Authorization = `Bearer ${auth.token}`;
         } else {
@@ -793,7 +800,7 @@ export class MediagraphClient {
     return this.request<number[]>('GET', '/api/assets/updated_since_last_sync', { params });
   }
 
-  async getAssetEventLog(id: number | string, params?: PaginationParams): Promise<unknown> {
+  async getAssetEventLog(id: number | string, params?: PaginationParams & { request_source?: RequestSourceFilter }): Promise<unknown> {
     return this.request('GET', `/api/assets/${id}/log`, { params });
   }
 
@@ -1507,6 +1514,7 @@ export class MediagraphClient {
     if (!auth) throw new Error('Not authenticated; cannot sign AWS request.');
 
     const headers: Record<string, string> = { Accept: 'text/plain' };
+    if (this.requestSource) headers['X-Mediagraph-Source'] = this.requestSource;
     if (auth.mode === 'bearer') headers.Authorization = `Bearer ${auth.token}`;
     else {
       headers.Authorization = `Basic ${Buffer.from(`:${auth.pat}`).toString('base64')}`;

@@ -485,7 +485,7 @@ Pass none of value/text/*_id to clear the field. The asset is reindexed on succe
       description: 'Audit trail for an asset: every version + who did what, paginated.',
       inputSchema: {
         type: 'object',
-        properties: { id: idParam, ...paginationParams },
+        properties: { id: idParam, ...paginationParams, request_source: { type: 'string', enum: ['web', 'api', 'mcp', 'cli', 'system', 'agent', 'unknown'], description: 'Filter history by source; agent includes MCP and CLI, unknown includes historical or unattributed records.' } },
         required: ['id'],
       },
     },
