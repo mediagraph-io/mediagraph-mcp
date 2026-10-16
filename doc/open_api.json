@@ -33745,11 +33745,22 @@
           "200": {
             "description": "Filtered asset history",
             "schema": {
-              "type": "object",
-              "properties": {
-                "request_source": {
-                  "type": "string",
-                  "description": "Request provenance; null for historical or unattributed activity"
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "request_source": {
+                    "type": "string",
+                    "description": "Request provenance; null for historical or unattributed activity",
+                    "enum": [
+                      "web",
+                      "api",
+                      "mcp",
+                      "cli",
+                      "system"
+                    ],
+                    "x-nullable": true
+                  }
                 }
               }
             },
@@ -33764,7 +33775,7 @@
                 {
                   "item_type": "Asset",
                   "item_id": 1069808115,
-                  "created_at": "2026-10-16T16:10:36.962Z",
+                  "created_at": "2026-10-16T16:16:34.323Z",
                   "event": "update",
                   "object_changes": {
                     "rating": [
@@ -33775,13 +33786,13 @@
                   "description": "updated the Asset rating",
                   "user": {
                     "id": 1066275473,
-                    "first_name": "Margene",
-                    "last_name": "Anderson",
-                    "email": "gino_brown@kiehn.example",
-                    "created_at": "2026-10-16T16:10:29.362Z",
+                    "first_name": "Roscoe",
+                    "last_name": "Abernathy",
+                    "email": "darren@swift-wisoky.test",
+                    "created_at": "2026-10-16T16:16:26.677Z",
                     "can_create_orgs": false,
-                    "confirmed_at": "2026-10-16T16:10:29.359Z",
-                    "default_username": "malcom_brown",
+                    "confirmed_at": "2026-10-16T16:16:26.673Z",
+                    "default_username": "kathe",
                     "otp_required_for_login": null,
                     "timezone": null,
                     "guest": null,
@@ -33790,8 +33801,8 @@
                     "enable_lightroom": true,
                     "support": false,
                     "avatar_url": null,
-                    "name": "Margene Anderson",
-                    "initials": "M A",
+                    "name": "Roscoe Abernathy",
+                    "initials": "R A",
                     "user_group_ids": [],
                     "last_organization": null,
                     "title": null,
