@@ -245,5 +245,5 @@ API requests. The header is not sent to S3 or file-download hosts. Both sources
 appear as Agent in Mediagraph History, while remaining separately filterable.
 
 Use `get_asset_event_log` with `request_source` set to `mcp`, `cli`, `web`,
-`api`, `system`, `agent` (MCP and CLI), or `unknown` (historical records).
+`api`, `system`, `agent` (MCP and CLI), or `unknown` (historical or unattributed records).
 Source labels describe provenance, not authorization or human approval.
