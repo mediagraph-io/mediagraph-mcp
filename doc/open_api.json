@@ -33695,6 +33695,124 @@
           }
         ]
       }
+    },
+    "/api/assets/{id}/log": {
+      "get": {
+        "tags": [
+          "Assets"
+        ],
+        "summary": "Asset History",
+        "description": "Audited changes and the responsible user. request_source describes request provenance, not permission or human approval. Historical records have a null source. Source filtering is applied before pagination; Total-Entries contains the filtered count.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Asset ID or GUID",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (30 entries per page)",
+            "required": false,
+            "type": "integer"
+          },
+          {
+            "name": "request_source",
+            "in": "query",
+            "description": "Exact source, agent for MCP and CLI together, or unknown for historical records",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "web",
+              "api",
+              "mcp",
+              "cli",
+              "system",
+              "agent",
+              "unknown"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered asset history",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "request_source": {
+                  "type": "string",
+                  "description": "Request provenance; null for historical or unattributed activity"
+                }
+              }
+            },
+            "headers": {
+              "total-entries": {
+                "type": "integer",
+                "x-example-value": 1
+              }
+            },
+            "examples": {
+              "application/json": [
+                {
+                  "item_type": "Asset",
+                  "item_id": 1069808115,
+                  "created_at": "2026-10-16T16:10:36.962Z",
+                  "event": "update",
+                  "object_changes": {
+                    "rating": [
+                      1,
+                      2
+                    ]
+                  },
+                  "description": "updated the Asset rating",
+                  "user": {
+                    "id": 1066275473,
+                    "first_name": "Margene",
+                    "last_name": "Anderson",
+                    "email": "gino_brown@kiehn.example",
+                    "created_at": "2026-10-16T16:10:29.362Z",
+                    "can_create_orgs": false,
+                    "confirmed_at": "2026-10-16T16:10:29.359Z",
+                    "default_username": "malcom_brown",
+                    "otp_required_for_login": null,
+                    "timezone": null,
+                    "guest": null,
+                    "guest_email": null,
+                    "lang": null,
+                    "enable_lightroom": true,
+                    "support": false,
+                    "avatar_url": null,
+                    "name": "Margene Anderson",
+                    "initials": "M A",
+                    "user_group_ids": [],
+                    "last_organization": null,
+                    "title": null,
+                    "user_id": 1066275473
+                  },
+                  "switched_from_user_id": null,
+                  "ip": null,
+                  "user_agent": null,
+                  "request_source": "cli"
+                }
+              ]
+            }
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "Authorization": []
+          }
+        ]
+      }
     }
   },
   "securityDefinitions": {

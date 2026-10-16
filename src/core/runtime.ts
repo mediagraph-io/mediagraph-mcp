@@ -9,7 +9,7 @@
 import { exec } from 'node:child_process';
 import { platform } from 'node:os';
 
-import { MediagraphClient, type AuthCredentials } from '../api/client.js';
+import { MediagraphClient, type AuthCredentials, type RequestSource } from '../api/client.js';
 import { OAuthHandler, type TokenData } from '../auth/oauth.js';
 import { TokenStore, type StoredTokens } from '../auth/token-store.js';
 import { isFullAccessScopeList } from '../api/scopes.js';
@@ -63,7 +63,7 @@ export class Runtime {
   private currentTokens: TokenData | null = null;
   private authInProgress = false;
 
-  constructor(config: RuntimeConfig = loadConfig()) {
+  constructor(config: RuntimeConfig = loadConfig(), requestSource: RequestSource = 'cli') {
     this.config = config;
     this.tokenStore = new TokenStore();
     this.oauth = new OAuthHandler({
@@ -73,6 +73,7 @@ export class Runtime {
       redirectPort: config.redirectPort,
     });
     this.client = new MediagraphClient({
+      requestSource,
       apiUrl: config.apiUrl,
       getAuth: () => this.getAuth(),
     });
