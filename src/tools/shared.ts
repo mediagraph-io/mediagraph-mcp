@@ -51,6 +51,10 @@ export interface ToolDefinition {
     wait?: {
       pollTool: string;
       idField?: string;
+      /** Poll-tool argument receiving the response identifier (defaults to idField). */
+      pollIdParam?: string;
+      /** Explicit execution flag required before --wait (preview has no job). */
+      executeFlag?: string;
       statusField: string;
       terminal: string[];
     };

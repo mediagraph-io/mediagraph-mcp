@@ -2,6 +2,8 @@
  * Mediagraph API Client - Complete API Coverage
  */
 
+import type { AdminFolderDuplicationRequest, AdminFolderDuplicationResponse } from './types/jobs.js';
+
 import type {
   Asset,
   AssetDataVersion,
@@ -1759,6 +1761,10 @@ export class MediagraphClient {
 
   async getBulkJob(id: number | string): Promise<BulkJob> {
     return this.request<BulkJob>('GET', `/api/bulk_jobs/${id}`);
+  }
+
+  async duplicateStorageFolderToCollection(data: AdminFolderDuplicationRequest): Promise<AdminFolderDuplicationResponse> {
+    return this.request('POST', '/api/admin_folder_duplications', { body: data });
   }
 
   async createBulkJob(data: {

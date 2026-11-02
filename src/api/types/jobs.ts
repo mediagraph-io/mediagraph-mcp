@@ -52,3 +52,27 @@ export interface MetaImport {
   mapping?: Record<string, string>;
   errors?: string[];
 }
+
+export interface AdminFolderDuplicationRequest {
+  source: number;
+  destination: number;
+  execute: boolean;
+  idempotency_key?: string;
+}
+
+export interface AdminFolderDuplicationResponse {
+  preview: boolean;
+  guid?: string;
+  organization_id?: number;
+  aasm_state?: 'pending' | 'processing' | 'errored' | 'processed' | 'failed' | 'canceled';
+  progress?: number;
+  total_assets?: number;
+  processed_assets?: number;
+  error?: string | null;
+  replayed?: boolean;
+  conflicts?: string[];
+  organization?: { id: number; slug: string; title: string };
+  source?: number | { id: number; name: string; asset_count: number; folder_count: number };
+  destination?: number | { id: number; name: string; path: string };
+  execution: { mode: 'dedicated'; queue: string; status: string; worker_ready?: boolean };
+}
