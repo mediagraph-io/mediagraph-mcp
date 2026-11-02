@@ -43,14 +43,16 @@ const TYPES: Record<string, WatchTypeConfig<unknown>> = {
       if (event.guid !== guid) return null;
       return event;
     },
-    isTerminal: (event) => event.progress === 100 || event.canceled === true,
+    isTerminal: (event) => typeof event.aasm_state === 'string'
+      ? ['processed', 'failed', 'canceled'].includes(event.aasm_state)
+      : event.done === true || event.canceled === true || event.progress === 100,
     poll: async (guid, runtime) => {
       const job = await runtime.client.getBulkJob(guid) as unknown as Record<string, unknown>;
       return job;
     },
     isPolledTerminal: (snapshot) => {
       const state = snapshot.aasm_state;
-      return state === 'processed' || state === 'errored' || state === 'canceled';
+      return state === 'processed' || state === 'failed' || state === 'canceled';
     },
   },
   upload: {

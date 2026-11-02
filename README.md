@@ -247,3 +247,25 @@ appear as Agent in Mediagraph History, while remaining separately filterable.
 Use `get_asset_event_log` with `request_source` set to `mcp`, `cli`, `web`,
 `api`, `system`, `agent` (MCP and CLI), or `unknown` (historical or unattributed records).
 Source labels describe provenance, not authorization or human approval.
+
+### Dedicated super-admin folder duplication
+
+Preview is the default. An active issuing membership, current super-admin role,
+and explicit `bulk_job:write` or `bulk_jobs:write` token scope are required.
+
+```sh
+mediagraph duplicate_storage_folder_to_collection --source 123 --destination 456 --preview
+mediagraph duplicate_storage_folder_to_collection --source 123 --destination 456 --execute --idempotency_key request_20261102_example --wait
+mediagraph watch bulk_job <guid>
+mediagraph cancel_bulk_job --id <guid>
+```
+
+The server reports resolved targets, live subtree counts, destination conflicts,
+and dedicated worker readiness. It never deletes destination content. Production
+needs one separately provisioned admin worker; this command does not provision or
+scale it. Occupied capacity returns 409; absent/misconfigured workers return 503.
+Reuse the same key after an uncertain response: retries return the existing job.
+`--dry-run` only prints the HTTP request; `--preview` queries server readiness.
+`--wait` requires execute and follows retries until processed, failed, or canceled.
+Inspect the returned error and counts: processed can include a graceful failure.
+Do not move/delete source content during a live-tree duplication.

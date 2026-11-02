@@ -10,6 +10,7 @@
  * with --poll-seconds.
  */
 
+import { CliError } from './errors.js';
 import type { ToolContext, ToolDefinition, ToolResult } from '../tools/shared.js';
 
 export interface WaitOptions {
@@ -20,6 +21,13 @@ export interface WaitOptions {
 export class WaitTimeout extends Error {
   constructor(public readonly elapsedMs: number, public readonly lastState: unknown) {
     super(`Wait timed out after ${elapsedMs}ms`);
+  }
+}
+
+export function validateWaitArguments(definition: ToolDefinition, args: Record<string, unknown>): void {
+  const executeFlag = definition._meta?.wait?.executeFlag;
+  if (executeFlag && (args[executeFlag] !== true || args.preview === true)) {
+    throw new CliError('BAD_ARGS', '--wait requires --execute; preview does not create a job.');
   }
 }
 
@@ -53,7 +61,7 @@ export async function waitForTerminal(
     await sleep(delay);
     attempt += 1;
 
-    const pollResult = await invokeTool(meta.pollTool, { [idField]: id });
+    const pollResult = await invokeTool(meta.pollTool, { [meta.pollIdParam ?? idField]: id });
     if (pollResult.isError) {
       // Transient errors — keep polling until timeout. Surface the last error
       // body via WaitTimeout if we never escape.

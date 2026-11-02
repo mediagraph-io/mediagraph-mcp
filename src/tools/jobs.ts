@@ -67,9 +67,10 @@ export const jobTools: ToolModule = {
       _meta: {
         wait: {
           pollTool: 'get_bulk_job',
-          idField: 'id',
+          idField: 'guid',
+          pollIdParam: 'id',
           statusField: 'aasm_state',
-          terminal: ['done', 'completed', 'failed', 'cancelled', 'errored'],
+          terminal: ['processed', 'failed', 'canceled'],
         },
       },
     },

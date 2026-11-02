@@ -14,6 +14,7 @@ import { tagTools } from './tags.js';
 import { rightsTools } from './rights.js';
 import { sharingTools } from './sharing.js';
 import { jobTools } from './jobs.js';
+import { adminFolderDuplicationTools } from './admin_folder_duplications.js';
 import { metaTools } from './meta.js';
 import { workflowTools } from './workflows.js';
 import { socialTools } from './social.js';
@@ -40,6 +41,7 @@ const allToolModules: ToolModule[] = [
   rightsTools,
   sharingTools,
   jobTools,
+  adminFolderDuplicationTools,
   metaTools,
   workflowTools,
   socialTools,

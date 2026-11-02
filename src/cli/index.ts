@@ -39,7 +39,7 @@ import { CliError, classify, exitCodeFor, emitError, failNow, type ErrorCode } f
 import { stripGlobalFlags, type GlobalFlags } from './global_flags.js';
 import { isPaginated, paginate } from './pagination.js';
 import { checkForUpdates, checkForUpdatesNow, printUpdateBannerIfTTY } from './update_check.js';
-import { waitForTerminal, WaitTimeout } from './wait.js';
+import { validateWaitArguments, waitForTerminal, WaitTimeout } from './wait.js';
 
 const HELP = `Mediagraph CLI / MCP server
 
@@ -235,6 +235,7 @@ async function invokeTool(
   args: Record<string, unknown>,
   flags: GlobalFlags,
 ): Promise<void> {
+  if (flags.wait && !flags.dryRun) validateWaitArguments(definition, args);
   const runtime = new Runtime(undefined, 'cli');
 
   if (definition.name !== 'reauthorize' && !flags.dryRun) {

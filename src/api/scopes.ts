@@ -131,6 +131,7 @@ const CONTROLLER_TO_ENTITY: Record<string, string> = {
 
   // bulk_jobs group (its own group now — was previously under reports)
   bulk_jobs: 'bulk_job',
+  admin_folder_duplications: 'bulk_job',
 
   // users group
   memberships: 'membership',
