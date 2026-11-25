@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MediagraphClient, MediagraphClientConfig } from '../api/client.js';
+import { handleTool } from '../tools/index.js';
 
 // Helper to create mock Response
 function createMockResponse(data: unknown, options: { status?: number; ok?: boolean } = {}) {
@@ -107,6 +108,35 @@ describe('MediagraphClient', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('share link ownership tools', () => {
+    it('searches eligible owners within the authenticated account', async () => {
+      const candidates = [{ id: 22, name: 'New Owner', email: 'owner@example.test' }];
+      mockFetch.mockResolvedValueOnce(createMockResponse(candidates));
+
+      const result = await handleTool('list_share_link_owner_candidates', { id: 8, q: 'New Owner' }, { client });
+
+      expect(JSON.parse(result.content[0].text)).toEqual(candidates);
+      const [url, request] = mockFetch.mock.calls[0];
+      expect(new URL(url).pathname).toBe('/api/share_links/8/transfer_candidates');
+      expect(new URL(url).searchParams.get('q')).toBe('New Owner');
+      expect(request.method).toBe('GET');
+    });
+
+    it('sends a transfer with both the new and expected owner IDs', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ id: 8, user_id: 22 }));
+
+      const result = await handleTool('transfer_share_link_ownership', {
+        id: 8, user_id: 22, expected_user_id: 14,
+      }, { client });
+
+      expect(JSON.parse(result.content[0].text)).toEqual({ id: 8, user_id: 22 });
+      const [url, request] = mockFetch.mock.calls[0];
+      expect(new URL(url).pathname).toBe('/api/share_links/8/transfer_ownership');
+      expect(request.method).toBe('PATCH');
+      expect(JSON.parse(request.body)).toEqual({ user_id: 22, expected_user_id: 14 });
     });
   });
 

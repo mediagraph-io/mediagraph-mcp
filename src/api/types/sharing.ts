@@ -19,8 +19,20 @@ export interface ShareLink {
   downloads_count?: number;
   share_type?: string;
   asset_group_id?: number;
+  user_id?: number;
   user?: User;
   editable?: boolean;
+}
+
+export interface ShareLinkOwnerCandidate {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export interface ShareLinkOwnerTransfer {
+  id: number;
+  user_id: number;
 }
 
 export interface Share {

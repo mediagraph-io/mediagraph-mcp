@@ -43,6 +43,31 @@ export const sharingTools: ToolModule = {
       },
     },
     {
+      name: 'list_share_link_owner_candidates',
+      description: 'Search eligible new owners of an existing share link in the current account. Requires an account admin. For Lightbox links, candidates must already belong to the Lightbox.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { ...idParam, description: 'Share link ID' },
+          q: { type: 'string', description: 'Search by member name or email' },
+        },
+        required: ['id'],
+      },
+    },
+    {
+      name: 'transfer_share_link_ownership',
+      description: 'Reassign an existing share link as an account admin. The URL and settings stay the same. Guest access follows the new owner’s permissions. Read the link first for its current user_id and use list_share_link_owner_candidates to find an eligible recipient.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          id: { ...idParam, description: 'Share link ID' },
+          user_id: { ...idParam, description: 'New owner user ID' },
+          expected_user_id: { ...idParam, description: 'Current owner user ID from the share link. A different current owner causes a conflict.' },
+        },
+        required: ['id', 'user_id', 'expected_user_id'],
+      },
+    },
+    {
       name: 'delete_share_link',
       description: 'Delete a share link',
       inputSchema: { type: 'object', properties: { id: idParam }, required: ['id'] },
@@ -230,6 +255,16 @@ export const sharingTools: ToolModule = {
         note?: string;
         expires_at?: string;
       }));
+    },
+    async list_share_link_owner_candidates(args, { client }) {
+      return successResult(await client.listShareLinkOwnerCandidates(args.id as number | string, args.q as string | undefined));
+    },
+    async transfer_share_link_ownership(args, { client }) {
+      return successResult(await client.transferShareLinkOwnership(
+        args.id as number | string,
+        args.user_id as number | string,
+        args.expected_user_id as number | string,
+      ));
     },
     async delete_share_link(args, { client }) {
       await client.deleteShareLink(args.id as number | string);
