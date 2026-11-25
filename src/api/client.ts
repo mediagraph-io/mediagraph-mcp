@@ -23,6 +23,8 @@ import type {
   RightsPackage,
   Permission,
   ShareLink,
+  ShareLinkOwnerCandidate,
+  ShareLinkOwnerTransfer,
   Share,
   CollectionShare,
   AccessRequest,
@@ -1288,6 +1290,22 @@ export class MediagraphClient {
 
   async updateShareLink(id: number | string, data: Partial<ShareLink>): Promise<ShareLink> {
     return this.request<ShareLink>('PUT', `/api/share_links/${id}`, { body: { share_link: data } });
+  }
+
+  async listShareLinkOwnerCandidates(id: number | string, query?: string): Promise<ShareLinkOwnerCandidate[]> {
+    return this.request<ShareLinkOwnerCandidate[]>('GET', `/api/share_links/${id}/transfer_candidates`, {
+      params: query ? { q: query } : undefined,
+    });
+  }
+
+  async transferShareLinkOwnership(
+    id: number | string,
+    userId: number | string,
+    expectedUserId: number | string,
+  ): Promise<ShareLinkOwnerTransfer> {
+    return this.request<ShareLinkOwnerTransfer>('PATCH', `/api/share_links/${id}/transfer_ownership`, {
+      body: { user_id: userId, expected_user_id: expectedUserId },
+    });
   }
 
   async deleteShareLink(id: number | string): Promise<void> {

@@ -33824,6 +33824,154 @@
           }
         ]
       }
+    },
+    "/api/share_links/{id}/transfer_candidates": {
+      "get": {
+        "tags": [
+          "Share Links"
+        ],
+        "summary": "Find eligible share link owners",
+        "description": "Account admins can search active members. For a Lightbox, candidates must also belong to that Lightbox.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search by name or email. Returns up to 20 members.",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List eligible owners",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer",
+                    "description": "Candidate user ID"
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Candidate name"
+                  },
+                  "email": {
+                    "type": "string",
+                    "description": "Candidate email"
+                  }
+                }
+              }
+            },
+            "headers": {},
+            "examples": {
+              "application/json": [
+                {
+                  "id": 1066275527,
+                  "name": "Royce Rogahn",
+                  "email": "dino@bartell-rippin.example"
+                }
+              ]
+            }
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "Authorization": []
+          }
+        ]
+      }
+    },
+    "/api/share_links/{id}/transfer_ownership": {
+      "patch": {
+        "tags": [
+          "Share Links"
+        ],
+        "summary": "Transfer share link ownership",
+        "description": "An account admin can reassign a share link to an active account member. For a Lightbox, the member\nmust already belong to the Lightbox. The URL and link settings stay the same. Guest access follows\nthe new owner's permissions. An out-of-date current owner ID returns 409.\n",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "description": "",
+            "required": true,
+            "schema": {
+              "required": [
+                "user_id",
+                "expected_user_id"
+              ],
+              "type": "object",
+              "properties": {
+                "user_id": {
+                  "type": "integer",
+                  "description": "New owner user ID"
+                },
+                "expected_user_id": {
+                  "type": "integer",
+                  "description": "Current owner user ID"
+                }
+              }
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "integer"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transfer an existing share link",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "description": "Share link ID"
+                },
+                "user_id": {
+                  "type": "integer",
+                  "description": "New owner user ID"
+                }
+              }
+            },
+            "headers": {},
+            "examples": {
+              "application/json": {
+                "id": 961852282,
+                "user_id": 1066275537
+              }
+            }
+          }
+        },
+        "deprecated": false,
+        "security": [
+          {
+            "Authorization": []
+          }
+        ]
+      }
     }
   },
   "securityDefinitions": {
